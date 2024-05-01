@@ -6,7 +6,7 @@ import enum
 
 import emager_py.dataset as ed
 
-from globals import OUT_DIR_MODELS
+from globals import OUT_DIR_MODELS, OUT_DIR_STATS
 
 
 class ModelMetric(enum.Enum):
@@ -31,7 +31,9 @@ def parse_model_name(model_name: str):
     return session, cross_validation_rep, quant_bits
 
 
-def format_model_root(subject):
+def format_model_root(subject, metadata=False):
+    if metadata:
+        return OUT_DIR_STATS + ed.format_subject(subject) + "metadata/"
     return OUT_DIR_MODELS + ed.format_subject(subject)
 
 
@@ -40,6 +42,10 @@ def format_model_name(
 ):
     if not extension.startswith("."):
         extension = "." + extension
+
+    out_dir = format_model_root(subject)
+    if extension != ".pth":
+        out_dir = format_model_root(subject, True)
 
     if isinstance(session, str):
         session = int(session)
@@ -52,7 +58,7 @@ def format_model_name(
         quant_bits = 32
 
     out_path = (
-        format_model_root(subject)
+        out_dir
         + f"s{session:03d}_cv{cross_validation_rep:03d}_q{quant_bits}{extension}"
     )
     return out_path

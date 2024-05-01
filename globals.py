@@ -7,4 +7,6 @@ if sys.platform == "darwin":
 # emager_py.utils.set_logging()
 
 EMAGER_DATASET_ROOT = emager_py.utils.DATASETS_ROOT + "EMAGER/"
-OUT_DIR_MODELS = "./models/"
+
+OUT_DIR_MODELS = "./output/models/"
+OUT_DIR_STATS = "./output/eval/"
