@@ -1,0 +1,4 @@
+-e ../emager-py
+torch
+lightning
+brevitas
