@@ -1,4 +1,4 @@
--e ../emager-py
-torch
-lightning
-brevitas
+-e "./emager-py[torch]"
+pandas
+seaborn
+pyqt5

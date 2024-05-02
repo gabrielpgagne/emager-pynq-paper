@@ -1,0 +1,6 @@
+[submodule "rhd2164-spi-fpga"]
+	path = rhd2164-spi-fpga
+	url = https://github.com/SBIOML/rhd2164-spi-fpga.git
+[submodule "emager-py"]
+	path = emager-py
+	url = git@github.com:SBIOML/emager-py.git

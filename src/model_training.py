@@ -2,6 +2,9 @@
 This module is used to train all subjects with the SCNN model and do preliminary testing.
 """
 
+import numpy as np
+import pandas as pd
+
 import torch.cuda
 import lightning as L
 from lightning.pytorch.callbacks.early_stopping import EarlyStopping
@@ -67,7 +70,8 @@ def train_scnn(
         model.set_target_embeddings(n_shots_embeddings)
 
         # Test and return accuracy
-        trainer.test(model, test)
+        test_ret = trainer.test(model, test)
+
         raw_acc = accuracy_score(model.test_preds, labels, normalize=True)
 
         # Test majority vote accuracy
@@ -77,14 +81,21 @@ def train_scnn(
         )
 
         # Capture results
+        for k, test_val in test_ret[0].items():
+            if k not in test_dict:
+                test_dict[k] = []
+            test_dict[k].append(test_val)
+
         test_dict["shots"].append(i)
         test_dict["acc_raw"].append(raw_acc)
         test_dict["acc_maj"].append(majority_acc)
 
-    # Save model and test outputs
-    utils.save_model(model, test_dict, subject, train_session, val_rep, quant)
+    results_df = pd.DataFrame(test_dict)
 
-    return model, test_dict
+    # Save model and test outputs
+    utils.save_model(model, results_df, subject, train_session, val_rep, quant)
+
+    return model, results_df
 
 
 def train_all_scnn(quantizations, transform, image_shape=(4, 16), max_epoch=15):
@@ -94,20 +105,21 @@ def train_all_scnn(quantizations, transform, image_shape=(4, 16), max_epoch=15):
     if not isinstance(quantizations, list):
         quantizations = [quantizations]
 
-    for quant in quantizations:
-        for subj in ed.get_subjects(EMAGER_DATASET_ROOT):
-            for ses in ed.get_sessions():
-                for lo in ed.get_repetitions():
+    valid_reps_pairs = list(zip(ed.get_repetitions()[::2], ed.get_repetitions()[1::2]))
+    for subj in ed.get_subjects(EMAGER_DATASET_ROOT):
+        for ses in ed.get_sessions():
+            for valid_reps in valid_reps_pairs:
+                for quant in quantizations:
                     print("*" * 80)
                     print(
-                        f"Training subject {subj} on session {ses} with LOOCV rep={lo} with {quant}-bit quantization."
+                        f"Training subject {subj} on session {ses} with L2OCV reps={valid_reps} with {quant}-bit quantization."
                     )
                     print("*" * 80)
 
                     model, test_out = train_scnn(
                         subj,
                         ses,
-                        lo,
+                        list(valid_reps),
                         quant,
                         transform,
                         image_shape,
@@ -120,7 +132,6 @@ def train_all_scnn(quantizations, transform, image_shape=(4, 16), max_epoch=15):
 
 
 if __name__ == "__main__":
-    quantizations = [-1]
-    train_all_scnn(quantizations, etrans.default_processing, max_epoch=5)
-    # TODO : calculate the "best" model for a given subject and session
+    quantizations = [1, 2, 3, 4, 6, 8, 32]
+    train_all_scnn(quantizations, etrans.default_processing, max_epoch=10)
     # TODO : convert to FINN-ONNX and build
