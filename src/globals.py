@@ -6,7 +6,15 @@ if sys.platform == "darwin":
 
 # emager_py.utils.set_logging()
 
+EMAGER_DATA_SHAPE = (4, 16)
+TRANSFORM = "default"
+
+TARGET_BOARD = "zybo-z7-20"
+
 EMAGER_DATASET_ROOT = emager_py.utils.DATASETS_ROOT + "EMAGER/"
+FINN_ROOT = "/home/gabrielgagne/Documents/git/finn/"
+
+TARGET_EMAGER_PYNQ_PATH = "/home/xilinx/emager-pynq/"
 
 OUT_DIR_MODELS = "./output/models/"
 OUT_DIR_STATS = "./output/eval/"

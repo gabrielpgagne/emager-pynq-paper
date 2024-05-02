@@ -129,7 +129,7 @@ def save_model(
         extension=".csv",
         ensure_exists=True,
     )
-
+    model = model.to("cpu")
     torch.save(model.state_dict(), model_path)
     metadata.to_csv(metadata_path, index=False)
 
@@ -163,7 +163,7 @@ def load_model(
         extension=".pth",
         ensure_exists=False,
     )
-
+    model = model.to("cpu")
     model.load_state_dict(torch.load(model_path))
     model.eval()
 
