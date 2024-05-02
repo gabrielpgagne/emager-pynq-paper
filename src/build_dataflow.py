@@ -23,14 +23,13 @@ if __name__ == "__main__":
     import globals
 
     SUBJECT = 0
-    SESSION = 1
     QUANT = 4
     SHOTS = 10
 
     # TODO adapt everything below
 
     # Create the required paths
-    build_dir = "output/finn/"
+    build_dir = globals.OUT_DIR_FINN
     if not os.path.exists(build_dir):
         os.makedirs(build_dir)
 
@@ -39,11 +38,16 @@ if __name__ == "__main__":
     session, lnocv, _ = utils.get_best_model(
         SUBJECT, QUANT, SHOTS, utils.ModelMetric.ACC_MAJ
     )
+
     torch_model = utils.load_model(
-        etm.EmagerSCNN((4, 16), QUANT), SUBJECT, session, lnocv, QUANT
+        etm.EmagerSCNN((globals.EMAGER_DATA_SHAPE), QUANT),
+        SUBJECT,
+        session,
+        lnocv,
+        QUANT,
     )
 
-    # Add topk on model
+    # Add topk on model ?
     input_bits = 16 if globals.TRANSFORM == "default" else 8
     model_transformations.save_model_as_qonnx(
         torch_model,
@@ -60,18 +64,18 @@ if __name__ == "__main__":
     model_validation.validate_brevitas_qonnx(
         torch_model,
         onnx_model,
-        globals.EMAGER_DATASET_ROOT,
+        globals.VALIDATION_EMAGER_ROOT,
         SUBJECT,
-        SESSION,
+        session,
         transform,
         10,
     )
 
     # Generate validation data and labels
     pvd, pvl = dataset.generate_processed_validation_data(
-        globals.EMAGER_DATASET_ROOT,
+        globals.VALIDATION_EMAGER_ROOT,
         SUBJECT,
-        SESSION,
+        session,
         transform,
         build_dir,
     )
@@ -82,9 +86,9 @@ if __name__ == "__main__":
     np.save(build_dir + "/expected_output", pred[:valid_samples])
 
     dataset.generate_raw_validation_data(
-        globals.EMAGER_DATASET_ROOT,
+        globals.VALIDATION_EMAGER_ROOT,
         SUBJECT,
-        SESSION,
+        session,
         transform,
         build_dir,
     )
@@ -103,20 +107,21 @@ if __name__ == "__main__":
         globals.TARGET_EMAGER_PYNQ_PATH
     )
     custom_build_steps.insert_custom_ip(
-        os.getcwd() + "/utils/insert_rhd2164.tcl",
+        os.getcwd() + "/src/insert_rhd2164.tcl",
         RHD2164_SPI_ROOT=os.getcwd() + "/rhd2164-spi-fpga/",
     )
 
     # Set build steps and build config
     dataflow_steps = custom_build_steps.default_finn_flow_custom_ip()
+    # dataflow_steps = custom_build_steps.finn_flow_only_deploy()
     # dataflow_steps = custom_build_steps.default_finn_flow_export_bd()
     # dataflow_steps = build_cfg.default_build_dataflow_steps
 
     cfg = build.DataflowBuildConfig(
         steps=dataflow_steps,
         # start_step=dataflow_steps[-8],  # Only build custom BD
-        # start_step=dataflow_steps[-2], # Only copy BD
-        output_dir=build_dir + "output_%s_%s/" % ("finnemager", board_name),
+        # start_step=dataflow_steps[-3],  # Only copy BD
+        output_dir=build_dir,
         mvau_wwidth_max=36,
         target_fps=100000,
         synth_clk_period_ns=10.0,
@@ -147,3 +152,5 @@ if __name__ == "__main__":
     # If error during step_create_dataflow_partition, check if your model is too large
     # Also test if Conv2D layers have bias=False
     build.build_dataflow_cfg(onnx_model, cfg)
+
+    exit(0)

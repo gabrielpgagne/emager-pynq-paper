@@ -12,9 +12,12 @@ TRANSFORM = "default"
 TARGET_BOARD = "zybo-z7-20"
 
 EMAGER_DATASET_ROOT = emager_py.utils.DATASETS_ROOT + "EMAGER/"
+VALIDATION_EMAGER_ROOT = "./data/EMAGER/"
+
 FINN_ROOT = "/home/gabrielgagne/Documents/git/finn/"
 
-TARGET_EMAGER_PYNQ_PATH = "/home/xilinx/emager-pynq/"
+TARGET_EMAGER_PYNQ_PATH = "/home/xilinx/workspace/emager-pynq/"
 
 OUT_DIR_MODELS = "./output/models/"
 OUT_DIR_STATS = "./output/eval/"
+OUT_DIR_FINN = "./output/finn/"
