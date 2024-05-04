@@ -23,7 +23,7 @@ if __name__ == "__main__":
     import globals
 
     SUBJECT = 0
-    QUANT = 4
+    QUANT = 3
     SHOTS = 10
 
     # TODO adapt everything below

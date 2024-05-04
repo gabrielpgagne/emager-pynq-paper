@@ -1,6 +1,6 @@
 lightning_logs/*
-output/finn/
-data/EMAGER/
+output/
+data/*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

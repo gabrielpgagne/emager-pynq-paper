@@ -320,21 +320,21 @@ if __name__ == "__main__":
     # print(save_model(torch.nn.Linear(5, 5), pd.DataFrame({"test"}), 1, 2, [9, 1], 2))
     # print(load_metadata(1, 2, [9, 1], 2))
 
-    ret = concat_metadata(0, 1)
-    print(ret)
-    print("*" * 80)
+    # ret = concat_metadata(0, 1)
+    # print(ret)
+    # print("*" * 80)
 
-    ret = get_average_across_validations(0, 4)
-    print(ret)
-    print("*" * 80)
+    # ret = get_average_across_validations(0, 4)
+    # print(ret)
+    # print("*" * 80)
 
-    ret = get_best_model(0, 4, -1, ModelMetric.ACC_RAW)
-    load_model(etm.EmagerSCNN((4, 16), 4), 0, ret[0], ret[1], 4)
+    ret = get_best_model(0, 3, 10, ModelMetric.ACC_MAJ)
+    load_model(etm.EmagerSCNN((4, 16), 3), 0, ret[0], ret[1], 3)
 
     print(ret)
     print("*" * 80)
 
     print(get_all_accuracy_vs_quant(-1)[0])
-    print(get_all_accuracy_vs_shots(4)[0])
+    print(get_all_accuracy_vs_shots(3)[0])
     # mask = ret["shots"].isin([-1])
     # print(ret[mask])
