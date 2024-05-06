@@ -7,7 +7,7 @@ import pandas as pd
 
 import emager_py.dataset as ed
 
-from globals import OUT_DIR_MODELS, OUT_DIR_STATS
+from globals import OUT_DIR_ROOT, OUT_DIR_MODELS, OUT_DIR_STATS, OUT_DIR_FINN
 
 
 class ModelMetric(enum.Enum):
@@ -35,25 +35,20 @@ def parse_model_name(model_name: str):
     return session, cross_validation_rep, quant_bits
 
 
-def format_model_root(subject, metadata=False, ensure_exists=False):
+def format_model_root(subject, subdir, ensure_exists=False):
     """
     Format the root directory for a given subject.
 
-    If metadata is True, the directory will be formatted for metadata files.
-
-    If ensure_exists is True, the directory will be created if it does not exist.
+    Params:
+        - subject: the subject to consider
+        - base: the base path, eg `globals.OUT_DIR_MODELS`, which is appended after `globals.OUT_DIR_ROOT`
+        - ensure_exists: whether to create the directory if it does not exist
 
     Returns the formatted path.
     """
-    path = ""
-    if metadata:
-        path = OUT_DIR_STATS + ed.format_subject(subject)
-    else:
-        path = OUT_DIR_MODELS + ed.format_subject(subject)
-
+    path = OUT_DIR_ROOT + subdir + ed.format_subject(subject)
     if ensure_exists and not os.path.exists(path):
         os.makedirs(path, exist_ok=True)
-
     return path
 
 
@@ -81,10 +76,12 @@ def format_model_name(
         extension = "." + extension
 
     out_dir = ""
-    if extension != ".pth":
-        out_dir = format_model_root(subject, True, ensure_exists=ensure_exists)
+    if extension == ".pth":
+        out_dir = format_model_root(
+            subject, OUT_DIR_MODELS, ensure_exists=ensure_exists
+        )
     else:
-        out_dir = format_model_root(subject, False, ensure_exists=ensure_exists)
+        out_dir = format_model_root(subject, OUT_DIR_STATS, ensure_exists=ensure_exists)
 
     if isinstance(session, str):
         session = int(session)
@@ -103,6 +100,16 @@ def format_model_name(
         out_dir + f"s{session:01d}_cv{cross_validation_rep}_q{quant_bits}{extension}"
     )
     return out_path
+
+
+def format_finn_output_dir(subject, quant_bits, shots):
+    build_dir = (
+        format_model_root(subject, OUT_DIR_FINN, True)
+        + f"{quant_bits:02d}quant_{shots:02d}shots/"
+    )
+    if not os.path.exists(build_dir):
+        os.makedirs(build_dir)
+    return build_dir
 
 
 def save_model(
@@ -190,7 +197,7 @@ def concat_metadata(subject, quant_bits):
         quant_bits = int(quant_bits)
 
     # For flexibility, list all files in the directory and filter by the quantization bits
-    files = sorted(os.listdir(OUT_DIR_STATS + ed.format_subject(subject)))
+    files = sorted(os.listdir(format_model_root(subject, OUT_DIR_STATS)))
 
     big_metadata = None
     for f in files:

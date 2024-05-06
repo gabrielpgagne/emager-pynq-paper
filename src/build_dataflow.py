@@ -1,9 +1,10 @@
 if __name__ == "__main__":
-    import subprocess as sp
     import os
     import sys
-    import torch
+    import json
+    import subprocess as sp
     import numpy as np
+    import torch
 
     sp.check_call([sys.executable, "-m", "pip", "install", "./emager-py[finn]"])
 
@@ -22,34 +23,39 @@ if __name__ == "__main__":
     import utils
     import globals
 
-    SUBJECT = 0
-    QUANT = 3
-    SHOTS = 10
-
-    # TODO adapt everything below
-
     # Create the required paths
-    build_dir = globals.OUT_DIR_FINN
-    if not os.path.exists(build_dir):
-        os.makedirs(build_dir)
+    MODEL_PARAMS = dict()
+    with open(
+        globals.OUT_DIR_ROOT + globals.OUT_DIR_FINN + "finn_config.json", "r"
+    ) as f:
+        MODEL_PARAMS = json.load(f)
 
-    onnx_model = build_dir + f"{SUBJECT}_{QUANT}_{SHOTS}.onnx"
-
-    session, lnocv, _ = utils.get_best_model(
-        SUBJECT, QUANT, SHOTS, utils.ModelMetric.ACC_MAJ
+    # Create build directory
+    build_dir = utils.format_finn_output_dir(
+        MODEL_PARAMS["subject"],
+        MODEL_PARAMS["quantization"],
+        MODEL_PARAMS["shots"],
     )
 
+    onnx_model = build_dir + "model.onnx"
+
+    SESSION, REPETITION, _ = utils.get_best_model(
+        MODEL_PARAMS["subject"],
+        MODEL_PARAMS["quantization"],
+        MODEL_PARAMS["shots"],
+        utils.ModelMetric.ACC_MAJ,
+    )
     torch_model = utils.load_model(
-        etm.EmagerSCNN((globals.EMAGER_DATA_SHAPE), QUANT),
-        SUBJECT,
-        session,
-        lnocv,
-        QUANT,
+        etm.EmagerSCNN((globals.EMAGER_DATA_SHAPE), MODEL_PARAMS["quantization"]),
+        MODEL_PARAMS["subject"],
+        SESSION,
+        REPETITION,
+        MODEL_PARAMS["quantization"],
     )
 
     # Add topk on model ?
     input_bits = 16 if globals.TRANSFORM == "default" else 8
-    model_transformations.save_model_as_qonnx(
+    model_transformations.save_scnn_model_as_qonnx(
         torch_model,
         onnx_model,
         globals.EMAGER_DATA_SHAPE,
@@ -65,8 +71,8 @@ if __name__ == "__main__":
         torch_model,
         onnx_model,
         globals.VALIDATION_EMAGER_ROOT,
-        SUBJECT,
-        session,
+        MODEL_PARAMS["subject"],
+        SESSION,
         transform,
         10,
     )
@@ -74,8 +80,8 @@ if __name__ == "__main__":
     # Generate validation data and labels
     pvd, pvl = dataset.generate_processed_validation_data(
         globals.VALIDATION_EMAGER_ROOT,
-        SUBJECT,
-        session,
+        MODEL_PARAMS["subject"],
+        SESSION,
         transform,
         build_dir,
     )
@@ -87,14 +93,14 @@ if __name__ == "__main__":
 
     dataset.generate_raw_validation_data(
         globals.VALIDATION_EMAGER_ROOT,
-        SUBJECT,
-        session,
+        MODEL_PARAMS["subject"],
+        SESSION,
         transform,
         build_dir,
     )
 
     # Create finn board definition if necessary
-    board_name = globals.TARGET_BOARD
+    board_name = globals.FINN_TARGET_BOARD
     if not boards.is_board_exists(board_name):
         print(f"Generating board definition for {board_name}")
         board_name = boards.add_board(

@@ -133,6 +133,11 @@ def train_all_scnn(quantizations, transform, image_shape=(4, 16), max_epoch=15):
 
 if __name__ == "__main__":
     quantizations = [1, 2, 3, 4, 6, 8, 32]
-    train_scnn(0, 1, [0, 1], 3, etrans.root_processing, max_epoch=10)
-    # train_all_scnn(quantizations, etrans.default_processing, max_epoch=10)
+
+    import globals
+
+    train_scnn(
+        globals.SUBJECT, 1, [0, 1], globals.QUANT, etrans.root_processing, max_epoch=5
+    )
+    # train_all_scnn(quantizations, etrans.root_processing, max_epoch=10)
     # TODO : convert to FINN-ONNX and build
