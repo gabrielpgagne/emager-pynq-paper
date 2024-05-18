@@ -2,7 +2,6 @@
 This module is used to train all subjects with the SCNN model and do preliminary testing.
 """
 
-import numpy as np
 import pandas as pd
 
 import torch.cuda
@@ -12,7 +11,6 @@ from sklearn.metrics import accuracy_score
 
 import emager_py.dataset as ed
 import emager_py.data_processing as dp
-import emager_py.utils as eu
 import emager_py.torch.models as etm
 import emager_py.transforms as etrans
 import emager_py.torch.datasets as etd
@@ -25,14 +23,30 @@ from globals import EMAGER_DATASET_ROOT
 
 
 def train_scnn(
-    subject,
-    train_session,
-    val_rep,
-    quant,
-    transform,
-    image_shape=(4, 16),
-    max_epoch=15,
-):
+    subject: int,
+    train_session: int,
+    val_rep: int | list,
+    quant: int,
+    transform: str,
+    image_shape: tuple[int, int] = (4, 16),
+    max_epoch: int = 15,
+) -> tuple[etm.EmagerSCNN, pd.DataFrame]:
+    """
+    Train SCNN on given arguments.
+
+    The SCNN is also tested after training on the other session, eg if `train_session==1`, test on session 2 and vice-versa.
+    
+    Parameters:
+        - subject: ..
+        - train_session: which session to **train** on
+        - val_rep: which repetitions(s) in the **train** session to validate on
+        - quant: quantization of the model (>=32 is unquantized)
+        - transform: one of `emager_py.transforms`
+        - image_shape: input shape of the EMG data
+        - max_epoch: maximum number of epochs to train for. EarlyStopping is activated, though.
+    
+    Returns the trained model and the evaluation outputs
+    """
     # Boilerplate
     train, val, test = etd.get_triplet_dataloaders(
         EMAGER_DATASET_ROOT,
@@ -60,7 +74,7 @@ def train_scnn(
         "acc_maj": [],
     }
 
-    n_votes = 150 // eu.get_transform_decimation(transform)
+    n_votes = 150 // etrans.get_transform_decimation(transform)
 
     embeddings, labels = etu.get_all_embeddings(model, test, model.device)
     majority_votes_true = emv.majority_vote(labels, n_votes)
@@ -137,7 +151,10 @@ if __name__ == "__main__":
     import globals
 
     train_scnn(
-        globals.SUBJECT, 1, [0, 1], globals.QUANT, etrans.root_processing, max_epoch=5
+       globals.SUBJECT, 1, [0, 1], globals.QUANT, etrans.root_processing, max_epoch=5
     )
+    #train_scnn(
+    #    globals.SUBJECT, 1, [0, 1], 32, etrans.root_processing, max_epoch=5
+    #)
     # train_all_scnn(quantizations, etrans.root_processing, max_epoch=10)
     # TODO : convert to FINN-ONNX and build

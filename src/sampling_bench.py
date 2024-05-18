@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 results = dict()
-with open("sampling_throughput.txt") as f:
+with open("data/sampling_throughput.txt") as f:
     lines = f.readlines()
     for line in lines:
         toks = line.split()
@@ -40,5 +40,5 @@ plt.legend(
     ],
     loc="center right",
 )
-plt.savefig("sampling_throughput.png")
+plt.savefig("output/img/sampling_throughput.png")
 plt.show()

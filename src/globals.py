@@ -8,10 +8,12 @@ if sys.platform == "darwin":
 # emager_py.utils.set_logging()
 
 SUBJECT = 0
-QUANT = 4
+QUANT = 8
 SHOTS = 10
 
 EMAGER_DATA_SHAPE = (4, 16)
+EMAGER_SAMPLING_RATE = 1000
+EMAGER_SAMPLE_BATCH = 25
 TRANSFORM = "root"
 
 assert (

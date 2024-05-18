@@ -315,6 +315,16 @@ def get_best_model(subject, quant, n_shots, metric: ModelMetric):
         best[metric.value],
     )
 
+def get_model_params_from_disk() -> dict:
+    """
+    Load the current model to build dict from `OUT_DIR_ROOT + OUT_DIR_FINN + "finn_config.json"`
+    """
+    dic = dict()
+    with open(
+        OUT_DIR_ROOT + OUT_DIR_FINN + "finn_config.json", "r"
+    ) as f:
+        dic =  json.load(f)
+    return dic
 
 if __name__ == "__main__":
     import emager_py.torch.models as etm

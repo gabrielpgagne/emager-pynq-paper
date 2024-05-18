@@ -1,7 +1,6 @@
 if __name__ == "__main__":
     import os
     import sys
-    import json
     import subprocess as sp
     import numpy as np
     import torch
@@ -11,7 +10,8 @@ if __name__ == "__main__":
     import finn.builder.build_dataflow as build
     import finn.builder.build_dataflow_config as build_cfg
 
-    from emager_py import dataset, transforms
+    from emager_py import dataset
+    from emager_py import transforms
     import emager_py.torch.models as etm
     from emager_py.finn import (
         custom_build_steps,
@@ -23,12 +23,7 @@ if __name__ == "__main__":
     import utils
     import globals
 
-    # Create the required paths
-    MODEL_PARAMS = dict()
-    with open(
-        globals.OUT_DIR_ROOT + globals.OUT_DIR_FINN + "finn_config.json", "r"
-    ) as f:
-        MODEL_PARAMS = json.load(f)
+    MODEL_PARAMS = utils.get_model_params_from_disk()
 
     # Create build directory
     build_dir = utils.format_finn_output_dir(
@@ -39,17 +34,11 @@ if __name__ == "__main__":
 
     onnx_model = build_dir + "model.onnx"
 
-    SESSION, REPETITION, _ = utils.get_best_model(
-        MODEL_PARAMS["subject"],
-        MODEL_PARAMS["quantization"],
-        MODEL_PARAMS["shots"],
-        utils.ModelMetric.ACC_MAJ,
-    )
     torch_model = utils.load_model(
         etm.EmagerSCNN((globals.EMAGER_DATA_SHAPE), MODEL_PARAMS["quantization"]),
         MODEL_PARAMS["subject"],
-        SESSION,
-        REPETITION,
+        MODEL_PARAMS["session"],
+        MODEL_PARAMS["repetition"],
         MODEL_PARAMS["quantization"],
     )
 
@@ -72,7 +61,7 @@ if __name__ == "__main__":
         onnx_model,
         globals.VALIDATION_EMAGER_ROOT,
         MODEL_PARAMS["subject"],
-        SESSION,
+        MODEL_PARAMS["session"],
         transform,
         10,
     )
@@ -81,7 +70,7 @@ if __name__ == "__main__":
     pvd, pvl = dataset.generate_processed_validation_data(
         globals.VALIDATION_EMAGER_ROOT,
         MODEL_PARAMS["subject"],
-        SESSION,
+        MODEL_PARAMS["session"],
         transform,
         build_dir,
     )
@@ -90,14 +79,6 @@ if __name__ == "__main__":
     valid_samples = 10
     np.save(build_dir + "/input", pvd[:valid_samples])
     np.save(build_dir + "/expected_output", pred[:valid_samples])
-
-    dataset.generate_raw_validation_data(
-        globals.VALIDATION_EMAGER_ROOT,
-        MODEL_PARAMS["subject"],
-        SESSION,
-        transform,
-        build_dir,
-    )
 
     # Create finn board definition if necessary
     board_name = globals.FINN_TARGET_BOARD
@@ -145,9 +126,9 @@ if __name__ == "__main__":
             build_cfg.DataflowOutputType.DEPLOYMENT_PACKAGE,
         ],
         verify_steps=[
-            build_cfg.VerificationStepType.STREAMLINED_PYTHON,  # TopK breaks verify steps
-            build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
-            build_cfg.VerificationStepType.STITCHED_IP_RTLSIM,
+           build_cfg.VerificationStepType.STREAMLINED_PYTHON,  # TopK breaks verify steps
+           build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
+           build_cfg.VerificationStepType.STITCHED_IP_RTLSIM,
         ],
         save_intermediate_models=True,
         verify_input_npy=build_dir + "input.npy",
@@ -159,4 +140,4 @@ if __name__ == "__main__":
     # Also test if Conv2D layers have bias=False
     build.build_dataflow_cfg(onnx_model, cfg)
 
-    exit(0)
+    sys.exit(0)
