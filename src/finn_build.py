@@ -48,12 +48,14 @@ def launch_finn_build(subject: int, quant: int, shots: int, transform_name: str)
     cmd = [
         "bash",
         "-c",
+        # Can't separate the arguments since we call bash -c
         f"{globals.FINN_ROOT}/run-docker.sh build_custom {os.getcwd()} src/build_dataflow",
     ]
 
-    ret = sp.run(cmd, check=True, universal_newlines=True)
+    ret = sp.run(cmd, universal_newlines=True)
     if ret.returncode != 0:
         raise RuntimeError("Failed to build FINN accelerator")
+    return params_dict
 
 
 def test_finn_accelerator(hostname:str, simulate_results: bool = False):
@@ -90,6 +92,9 @@ def test_finn_accelerator(hostname:str, simulate_results: bool = False):
         for _ in range(inferences_to_push):
             rs.r.r.lpush(rs.r.PREDICTIONS_FIFO_KEY, np.random.randint(0, 6))
     else:
+        print("*"*50)
+        print("TODO!!!!! Real testing routine of FINN accelerator")
+        print("*"*50)
         c = ro.connect_to_pynq()
         ret = ro.run_remote_finn(
             c, globals.TARGET_EMAGER_PYNQ_PATH, "python3 validate_finn.py"
@@ -114,16 +119,14 @@ def test_finn_accelerator(hostname:str, simulate_results: bool = False):
     }
 
     # Write results to disk
-    out_dir = utils.format_finn_output_dir(md["subject"], md["quantization"], md["shots"])
-    file_name = utils.format_model_name(md["subject"], md["session"], md["repetition"], md["quantization"], ".csv", True).split("/")[-1]
+    out_path = utils.format_model_name(globals.OUT_DIR_FINN, md["subject"], md["session"], md["repetition"], md["quantization"], md["shots"])
     results_df = pd.DataFrame(ret)
-    results_df.to_csv(out_dir+file_name, index=False)
+    results_df.to_csv(out_path, index=False)
     return results_df
 
 
 if __name__ == "__main__":
     from emager_py.emager_redis import get_docker_redis_ip
-    # TODO: after building, test the accelerator
     launch_finn_build(globals.SUBJECT, globals.QUANT, globals.SHOTS, globals.TRANSFORM)
-    print(test_finn_accelerator(get_docker_redis_ip(), True))
+    test_finn_accelerator(get_docker_redis_ip(), True)
     print("Exiting.")

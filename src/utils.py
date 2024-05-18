@@ -2,7 +2,6 @@ import os
 import torch
 import json
 import enum
-import numpy as np
 import pandas as pd
 
 import emager_py.dataset as ed
@@ -21,6 +20,8 @@ class ModelMetric(enum.Enum):
 def parse_model_name(model_name: str):
     """
     Returns the session, cross-validation repetition, and quantization bits from a model name.
+
+    The extension is ignored, as long as the project's formatting is enforced.
 
     Params:
         - model_name: the name of the model file, e.g. "s1_cv01-02_q32.pth", can also be a full path.
@@ -41,7 +42,7 @@ def format_model_root(subject, subdir, ensure_exists=False):
 
     Params:
         - subject: the subject to consider
-        - base: the base path, eg `globals.OUT_DIR_MODELS`, which is appended after `globals.OUT_DIR_ROOT`
+        - subdir: the base path, eg `globals.OUT_DIR_MODELS`, which is appended after `globals.OUT_DIR_ROOT`
         - ensure_exists: whether to create the directory if it does not exist
 
     Returns the formatted path.
@@ -53,16 +54,17 @@ def format_model_root(subject, subdir, ensure_exists=False):
 
 
 def format_model_name(
+    out_dir,
     subject,
     session,
     cross_validation_rep,
     quant_bits,
-    extension=".pth",
     ensure_exists=False,
 ):
     """Format the model name for a given subject, session, cross-validation repetition, and quantization bits.
 
     Args:
+        output_base: root output folder eg globals.OUT_DIR_STATS or globals.OUT_DIR_MODEL
         subject (str|int)
         session (str|int)
         cross_validation_rep (str|int): Cross validation repetition
@@ -70,18 +72,13 @@ def format_model_name(
         extension (str, optional): File extension. Defaults to ".pth".
 
     Returns:
-        str: The formatted model name
+        str: The full path of the formatted model name
     """
-    if not extension.startswith("."):
-        extension = "." + extension
+    extension = ".csv"
+    if out_dir == OUT_DIR_MODELS:
+        extension = ".pth"
 
-    out_dir = ""
-    if extension == ".pth":
-        out_dir = format_model_root(
-            subject, OUT_DIR_MODELS, ensure_exists=ensure_exists
-        )
-    else:
-        out_dir = format_model_root(subject, OUT_DIR_STATS, ensure_exists=ensure_exists)
+    out_dir = format_model_root(subject, out_dir, ensure_exists=ensure_exists)
 
     if isinstance(session, str):
         session = int(session)
@@ -103,6 +100,9 @@ def format_model_name(
 
 
 def format_finn_output_dir(subject, quant_bits, shots):
+    """
+    Format the output directory for the FINN build flow, with the structure `output/finn/<subject>/<nq>quant_<ns>shots/`
+    """
     build_dir = (
         format_model_root(subject, OUT_DIR_FINN, True)
         + f"{quant_bits:02d}quant_{shots:02d}shots/"
@@ -120,20 +120,23 @@ def save_model(
     cross_validation_rep,
     quant_bits,
 ):
+    """
+    Metadata must be the pytorch model's metadata. Not FINN evaluation results.
+    """
     model_path = format_model_name(
+        OUT_DIR_MODELS,
         subject,
         session,
         cross_validation_rep,
         quant_bits,
-        extension=".pth",
         ensure_exists=True,
     )
     metadata_path = format_model_name(
+        OUT_DIR_STATS,
         subject,
         session,
         cross_validation_rep,
         quant_bits,
-        extension=".csv",
         ensure_exists=True,
     )
     model = model.to("cpu")
@@ -144,14 +147,13 @@ def save_model(
 
 
 def load_metadata(
+    base_path,
     subject,
     session,
     cross_validation_rep,
     quant_bits,
 ) -> pd.DataFrame:
-    metadata_path = format_model_name(
-        subject, session, cross_validation_rep, quant_bits, extension=".csv"
-    )
+    metadata_path = format_model_name(base_path, subject, session, cross_validation_rep, quant_bits)
     return pd.read_csv(metadata_path)
 
 
@@ -163,11 +165,11 @@ def load_model(
     quant_bits,
 ):
     model_path = format_model_name(
+        OUT_DIR_MODELS,
         subject,
         session,
         cross_validation_rep,
         quant_bits,
-        extension=".pth",
         ensure_exists=False,
     )
     model = model.to("cpu")
@@ -180,11 +182,11 @@ def load_model(
 def load_both(model, subject, session, cross_validation_rep, quant_bits):
     return load_model(
         model, subject, session, cross_validation_rep, quant_bits
-    ), load_metadata(subject, session, cross_validation_rep, quant_bits)
+    ), load_metadata(OUT_DIR_STATS, subject, session, cross_validation_rep, quant_bits)
 
-
-def concat_metadata(subject, quant_bits):
-    """For a given subject and quantization bits, concatenate all metadata cross-validation files into a single DataFrame.
+def concat_metadata(base_dir, subject, quant_bits):
+    """
+    For a given subject and quantization bits, concatenate all metadata cross-validation files into a single DataFrame.
 
     Args:
         subject (int): The subject to consider
@@ -192,20 +194,27 @@ def concat_metadata(subject, quant_bits):
 
     Returns:
         pd.DataFrame: The concatenated metadata with columns (shots, session, validation_rep, acc_raw, acc_maj).
+        `None` if no metadata files exist.
     """
     if not isinstance(quant_bits, int):
         quant_bits = int(quant_bits)
 
+    if quant_bits < 0:
+        quant_bits = 32
+
     # For flexibility, list all files in the directory and filter by the quantization bits
-    files = sorted(os.listdir(format_model_root(subject, OUT_DIR_STATS)))
+    files = sorted(os.listdir(format_model_root(subject, base_dir)))
 
     big_metadata = None
     for f in files:
+        if not f.endswith(".csv"):
+            continue
+
         ses, rep, quant = parse_model_name(f)
         if quant != quant_bits:
             continue
 
-        data = load_metadata(subject, ses, rep, quant_bits)
+        data = load_metadata(base_dir, subject, ses, rep, quant_bits)
         data.insert(1, "validation_rep", [rep] * len(data))
         data.insert(1, "session", [ses] * len(data))
         if big_metadata is None:
@@ -216,7 +225,7 @@ def concat_metadata(subject, quant_bits):
     return big_metadata
 
 
-def get_average_across_validations(subject: int, quant_bits: int):
+def get_average_across_validations(base_dir, subject: int, quant_bits: int):
     """
     Get the average accuracy across all cross-validation repetitions for a given subject and quantization bits.
 
@@ -226,16 +235,16 @@ def get_average_across_validations(subject: int, quant_bits: int):
 
     Returns a DataFrame with the average accuracy across all cross-validation repetitions with keys (shots, acc_raw, acc_maj)
     """
-    if not isinstance(quant_bits, int):
-        quant_bits = int(quant_bits)
-
-    metadata = concat_metadata(subject, quant_bits)
+    metadata = concat_metadata(base_dir, subject, quant_bits)
+    #if metadata is None:
+    #   print("Could not fetch metadata across validations")
+    #   return pd.DataFrame({"shots": [], ModelMetric.ACC_RAW: [], ModelMetric.ACC_MAJ: []})
     metadata.pop("session")
     metadata.pop("validation_rep")
     return metadata.groupby("shots", as_index=False).mean()
 
 
-def get_all_accuracy_vs_shots(quant_bits: int):
+def get_all_accuracy_vs_shots(base_dir, quant_bits: int):
     """
     Get the average accuracy across all subjects for a given quantization bits.
 
@@ -244,22 +253,20 @@ def get_all_accuracy_vs_shots(quant_bits: int):
 
     Returns a list of DataFrame with the average accuracy across all subjects with keys (shots, acc_raw, acc_maj)
     """
-    if not isinstance(quant_bits, int):
-        quant_bits = int(quant_bits)
-    subjects = os.listdir(OUT_DIR_STATS)
+    models_root = OUT_DIR_ROOT + base_dir
+    subjects = list(filter(lambda f: os.path.isdir(models_root+f), os.listdir(models_root)))
     metadata = []
     for subject in subjects:
-        md = get_average_across_validations(subject, quant_bits)
+        md = get_average_across_validations(base_dir, subject, quant_bits)
         metadata.append(md)
         # if metadata is None:
         #    metadata = md
         #    continue
         # metadata = pd.concat([metadata, md], axis=0)
-    assert len(metadata) == len(subjects)
     return metadata
 
 
-def get_all_accuracy_vs_quant(n_shots: int):
+def get_all_accuracy_vs_quant(base_dir: str, n_shots: int):
     """Get the average accuracy across all subjects for a given number of shots.
 
     Args:
@@ -268,17 +275,17 @@ def get_all_accuracy_vs_quant(n_shots: int):
     Returns:
         list[DataFrame]: A list of DataFrames with the average accuracy across all subjects with keys (quantization, acc_raw, acc_maj)
     """
-    subjects = os.listdir(OUT_DIR_STATS)
+    models_root = OUT_DIR_ROOT + base_dir
+    subjects = list(filter(lambda f: os.path.isdir(models_root+f), os.listdir(models_root)))
     all_metadata = []
     for subject in subjects:
         metadata = None
-        for f in os.listdir(OUT_DIR_STATS + subject):
-            if not f.endswith(".csv"):
-                continue
+        files = list(filter(lambda f: f.endswith(".csv"), os.listdir(models_root+subject)))
+        for f in files:
             _, _, quant_bits = parse_model_name(f)
             if quant_bits < 0:
                 quant_bits = 32
-            md = get_average_across_validations(subject, quant_bits)
+            md = get_average_across_validations(base_dir, subject, quant_bits)
             mask = md["shots"].isin([n_shots])
             md = md[mask]
             md.pop("shots")
@@ -288,7 +295,6 @@ def get_all_accuracy_vs_quant(n_shots: int):
                 continue
             metadata = pd.concat([metadata, md], axis=0, ignore_index=True)
         all_metadata.append(metadata.groupby("quantization", as_index=False).mean())
-    assert len(all_metadata) == len(subjects)
     return all_metadata
 
 
@@ -305,7 +311,7 @@ def get_best_model(subject, quant, n_shots, metric: ModelMetric):
     if isinstance(n_shots, str):
         n_shots = int(n_shots)
 
-    results = concat_metadata(subject, quant)
+    results = concat_metadata(OUT_DIR_STATS, subject, quant)
     mask = results["shots"].isin([n_shots])
     results = results[mask]
     best = results.loc[results[metric.value].idxmax()]
