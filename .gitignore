@@ -1,5 +1,5 @@
 lightning_logs/*
-output/
+output*
 data/*/
 .vscode
 

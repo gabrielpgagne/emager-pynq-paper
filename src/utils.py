@@ -255,6 +255,7 @@ def get_all_accuracy_vs_shots(base_dir, quant_bits: int):
     """
     models_root = OUT_DIR_ROOT + base_dir
     subjects = list(filter(lambda f: os.path.isdir(models_root+f), os.listdir(models_root)))
+    subjects.sort()
     metadata = []
     for subject in subjects:
         md = get_average_across_validations(base_dir, subject, quant_bits)
@@ -277,6 +278,7 @@ def get_all_accuracy_vs_quant(base_dir: str, n_shots: int):
     """
     models_root = OUT_DIR_ROOT + base_dir
     subjects = list(filter(lambda f: os.path.isdir(models_root+f), os.listdir(models_root)))
+    subjects.sort()
     all_metadata = []
     for subject in subjects:
         metadata = None

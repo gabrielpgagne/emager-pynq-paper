@@ -35,7 +35,7 @@ if __name__ == "__main__":
     onnx_model = build_dir + "model.onnx"
 
     torch_model = utils.load_model(
-        etm.EmagerSCNN((globals.EMAGER_DATA_SHAPE), MODEL_PARAMS["quantization"]),
+        etm.EmagerSCNN(MODEL_PARAMS["quantization"]),
         MODEL_PARAMS["subject"],
         MODEL_PARAMS["session"],
         MODEL_PARAMS["repetition"],
