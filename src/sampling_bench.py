@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 import pandas as pd
 
@@ -14,31 +15,27 @@ max_batch = results["Batchsize"][-1]
 
 results = pd.DataFrame(results)
 
-results[1:].plot(x="Batchsize", y=["sps"])
-
-plt.ylabel("Samples per second")
-plt.hlines(
+sns.set_theme(font_scale=2)
+sns.lineplot(results[1:], x="Batchsize", y="sps", linewidth=2)
+plt.axhline(
     1000,
     0,
     max_batch,
-    colors="r",
-    linestyles="dashed",
+    color="r",
+    linestyle="dashed",
 )
-plt.hlines(
+plt.axhline(
     max_sps,
     0,
     max_batch,
-    colors="b",
-    linestyles="dashed",
+    color="b",
+    linestyle="dashed",
 )
+
+plt.ylim(0, 8300)
 plt.grid(True, "both", "both")
-plt.legend(
-    [
-        "Throughput (samples per second)",
-        "Minimum target sampling rate",
-        "Sampling rate without Redis",
-    ],
-    loc="center right",
-)
-plt.savefig("output/img/sampling_throughput.png")
+plt.ylabel("Samples per second")
+plt.xlabel("Batch size")
+plt.savefig("output/img/sampling_throughput.png",bbox_inches="tight")
+
 plt.show()

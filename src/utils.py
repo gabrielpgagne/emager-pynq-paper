@@ -1,4 +1,5 @@
 import os
+from typing import Iterable
 import torch
 import json
 import enum
@@ -10,8 +11,10 @@ from globals import OUT_DIR_ROOT, OUT_DIR_MODELS, OUT_DIR_STATS, OUT_DIR_FINN
 
 
 class ModelMetric(enum.Enum):
-    ACC_RAW = "acc_raw"
-    ACC_MAJ = "acc_maj"
+    ACC_RAW_INTRA = "acc_raw_intra"
+    ACC_MAJ_INTRA = "acc_maj_intra"
+    ACC_RAW_INTER = "acc_raw_inter"
+    ACC_MAJ_INTER = "acc_maj_inter"
 
     def __str__(self):
         return self.value
@@ -84,7 +87,7 @@ def format_model_name(
         session = int(session)
     if isinstance(quant_bits, str):
         quant_bits = int(quant_bits)
-    if not isinstance(cross_validation_rep, list):
+    if not isinstance(cross_validation_rep, Iterable):
         cross_validation_rep = [cross_validation_rep]
 
     cross_validation_rep = [f"{int(r):02d}" for r in cross_validation_rep]
@@ -153,7 +156,9 @@ def load_metadata(
     cross_validation_rep,
     quant_bits,
 ) -> pd.DataFrame:
-    metadata_path = format_model_name(base_path, subject, session, cross_validation_rep, quant_bits)
+    metadata_path = format_model_name(
+        base_path, subject, session, cross_validation_rep, quant_bits
+    )
     return pd.read_csv(metadata_path)
 
 
@@ -183,6 +188,7 @@ def load_both(model, subject, session, cross_validation_rep, quant_bits):
     return load_model(
         model, subject, session, cross_validation_rep, quant_bits
     ), load_metadata(OUT_DIR_STATS, subject, session, cross_validation_rep, quant_bits)
+
 
 def concat_metadata(base_dir, subject, quant_bits):
     """
@@ -236,7 +242,7 @@ def get_average_across_validations(base_dir, subject: int, quant_bits: int):
     Returns a DataFrame with the average accuracy across all cross-validation repetitions with keys (shots, acc_raw, acc_maj)
     """
     metadata = concat_metadata(base_dir, subject, quant_bits)
-    #if metadata is None:
+    # if metadata is None:
     #   print("Could not fetch metadata across validations")
     #   return pd.DataFrame({"shots": [], ModelMetric.ACC_RAW: [], ModelMetric.ACC_MAJ: []})
     metadata.pop("session")
@@ -254,7 +260,9 @@ def get_all_accuracy_vs_shots(base_dir, quant_bits: int):
     Returns a list of DataFrame with the average accuracy across all subjects with keys (shots, acc_raw, acc_maj)
     """
     models_root = OUT_DIR_ROOT + base_dir
-    subjects = list(filter(lambda f: os.path.isdir(models_root+f), os.listdir(models_root)))
+    subjects = list(
+        filter(lambda f: os.path.isdir(models_root + f), os.listdir(models_root))
+    )
     subjects.sort()
     metadata = []
     for subject in subjects:
@@ -277,12 +285,16 @@ def get_all_accuracy_vs_quant(base_dir: str, n_shots: int):
         list[DataFrame]: A list of DataFrames with the average accuracy across all subjects with keys (quantization, acc_raw, acc_maj)
     """
     models_root = OUT_DIR_ROOT + base_dir
-    subjects = list(filter(lambda f: os.path.isdir(models_root+f), os.listdir(models_root)))
+    subjects = list(
+        filter(lambda f: os.path.isdir(models_root + f), os.listdir(models_root))
+    )
     subjects.sort()
     all_metadata = []
     for subject in subjects:
         metadata = None
-        files = list(filter(lambda f: f.endswith(".csv"), os.listdir(models_root+subject)))
+        files = list(
+            filter(lambda f: f.endswith(".csv"), os.listdir(models_root + subject))
+        )
         for f in files:
             _, _, quant_bits = parse_model_name(f)
             if quant_bits < 0:
@@ -323,16 +335,127 @@ def get_best_model(subject, quant, n_shots, metric: ModelMetric):
         best[metric.value],
     )
 
+
 def get_model_params_from_disk() -> dict:
     """
     Load the current model to build dict from `OUT_DIR_ROOT + OUT_DIR_FINN + "finn_config.json"`
     """
     dic = dict()
-    with open(
-        OUT_DIR_ROOT + OUT_DIR_FINN + "finn_config.json", "r"
-    ) as f:
-        dic =  json.load(f)
+    with open(OUT_DIR_ROOT + OUT_DIR_FINN + "finn_config.json", "r") as f:
+        dic = json.load(f)
     return dic
+
+
+def get_accelerator_resources(
+    subject,
+    quant,
+    shots,
+) -> dict:
+    """
+    Load the accelerator resources from `OUT_DIR_ROOT + OUT_DIR_FINN + "resources.json"`
+    """
+    subject = ed.format_subject(subject)
+    quant = f"{quant:02d}"
+    shots = f"{shots:02d}"
+
+    val = 0
+
+    with open(
+        OUT_DIR_ROOT
+        + OUT_DIR_FINN
+        + f"{subject}/{quant}quant_{shots}shots/report/post_synth_resources.xml",
+        "r",
+    ) as f:
+        lines = f.readlines()
+        for i, line in enumerate(lines):
+            if "top_StreamingDataflowPartition_1_0" in line:
+                lut_line = lines[i + 1]
+                idx = lut_line.find("contents=")
+                idx2 = lut_line.find("halign=") - 2
+                val = int(lut_line[idx + 10 : idx2])
+                break
+    return val
+
+
+def lock_finn(**kwargs):
+    with open(f"{OUT_DIR_ROOT}/{OUT_DIR_FINN}/lock.txt", "w") as f:
+        f.write(f"locked by {kwargs}")
+
+
+def unlock_finn():
+    os.remove(f"{OUT_DIR_ROOT}/{OUT_DIR_FINN}/lock.txt")
+
+
+def is_finn_locked():
+    if os.path.exists(f"{OUT_DIR_ROOT}/{OUT_DIR_FINN}/lock.txt"):
+        return True
+    else:
+        return False
+
+def resume_from_latest(cross_validations: list, quantizations: list[int]):
+    """
+    Returns subject, session, cross-validation, and quantization to resume training from the latest model.
+    """
+    cross_validations = [[int(v) for v in cv] for cv in cross_validations]
+    sub0, ses0, cv0, q0 = 0, 0, 0, 0
+
+    # Get all subjects
+    try:
+        subjs = ed.get_subjects(OUT_DIR_ROOT + OUT_DIR_MODELS)
+        if len(subjs) == 0:
+            return sub0, ses0, cv0, q0
+        sub0 = len(subjs) - 1
+    except FileNotFoundError:
+        return sub0, ses0, cv0, q0
+    
+    # Get all the models for the latest subject
+    models = os.listdir(OUT_DIR_ROOT + OUT_DIR_MODELS + subjs[-1])
+    if len(models) == 0:
+        return sub0, ses0, cv0, q0
+
+    ses0 = int(max([m.split("_")[0][1:] for m in models])) - 1  # session 1-indexed
+    models = list(filter(lambda e: e[1:].startswith(str(ses0 + 1)), models))
+    if len(models) == 0:
+        return sub0, ses0, cv0, q0
+
+    # now find max cross-validation and filter models
+    for model in models:
+        _, cv, _ = parse_model_name(model)
+        where = cross_validations.index(cv)
+        if where > cv0:
+            cv0 = where
+    models = list(
+        filter(
+            lambda model: parse_model_name(model)[1] == cross_validations[cv0],
+            models,
+        )
+    )
+    if len(models) == 0:
+        return sub0, ses0, cv0, q0
+
+    # finally find max quantization and filter models
+    for model in models:
+        _, _, q = parse_model_name(model)
+        where = quantizations.index(q)
+        if where > q0:
+            q0 = where
+
+    lims = [
+        len(quantizations),
+        len(cross_validations),
+        len(ed.get_sessions()),
+        len(subjs),
+    ]
+    resume = [q0, cv0, ses0, sub0]
+    for i, (res, lim) in enumerate(list(zip(resume, lims))[:-1]):
+        r0 = (res + 1) % lim
+        resume[i] = r0
+        if not r0 < res:
+            # no rollover so break
+            break
+        # rollover
+        resume[i + 1] += 1
+    return tuple(reversed(resume))
 
 if __name__ == "__main__":
     import emager_py.torch.models as etm
@@ -353,6 +476,12 @@ if __name__ == "__main__":
     # print(ret)
     # print("*" * 80)
 
+    for subject in [0, 1]:
+        for quant in [2, 3, 4, 6, 8]:
+            print(
+                f"Total LUTs for {subject} @ {quant}-bits:",
+                get_accelerator_resources(subject, quant, 10),
+            )
     ret = get_best_model(0, 3, 10, ModelMetric.ACC_MAJ)
     load_model(etm.EmagerSCNN((4, 16), 3), 0, ret[0], ret[1], 3)
 

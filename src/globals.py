@@ -2,14 +2,12 @@ import emager_py.transforms
 import emager_py.utils
 import sys
 
-if sys.platform == "darwin":
-    emager_py.utils.DATASETS_ROOT = "/Users/gabrielgagne/Documents/Datasets/"
 
 # emager_py.utils.set_logging()
 
 SUBJECT = 0
 QUANT = 8
-SHOTS = 10
+SHOTS = -1
 
 EMAGER_DATA_SHAPE = (4, 16)
 EMAGER_SAMPLING_RATE = 1000
@@ -21,7 +19,10 @@ assert (
 ), f"Invalid transform: {TRANSFORM}. Must be in {emager_py.transforms.transforms_lut.keys()}"
 
 
-EMAGER_DATASET_ROOT = emager_py.utils.DATASETS_ROOT + "EMAGER/"
+EMAGER_DATASET_ROOT = "./data/EMAGER/"
+if sys.platform == "darwin":
+    "/Users/gabrielgagne/Documents/Datasets/EMAGER/"
+
 VALIDATION_EMAGER_ROOT = "./data/EMAGER/"
 
 FINN_ROOT = "/home/gabrielgagne/Documents/git/finn/"
@@ -34,7 +35,10 @@ FINN_MODEL_PARAMS_DICT = {
 
 TARGET_EMAGER_PYNQ_PATH = "/home/xilinx/workspace/emager-pynq/"
 
-OUT_DIR_ROOT = "./output/"
+# OUT_DIR_ROOT = "./output_scnn_16_16_16_32_32_q/"
+# OUT_DIR_ROOT = "./output_scnn/"
+OUT_DIR_ROOT = "./output_cnn/"
+
 OUT_DIR_MODELS = "models/"
 OUT_DIR_STATS = "eval/"
 OUT_DIR_FINN = "finn/"

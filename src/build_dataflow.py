@@ -19,11 +19,18 @@ if __name__ == "__main__":
         model_validation,
         boards,
     )
+    from emager_py.utils import set_logging
 
     import utils
     import globals
 
+    set_logging()
+
     MODEL_PARAMS = utils.get_model_params_from_disk()
+    utils.unlock_finn()
+
+    # print("Hello")
+    # sys.exit(0)
 
     # Create build directory
     build_dir = utils.format_finn_output_dir(
@@ -49,7 +56,7 @@ if __name__ == "__main__":
         onnx_model,
         globals.EMAGER_DATA_SHAPE,
         "INT16" if input_bits == 16 else "UINT8",
-        show=True,
+        show=False,
     )
 
     if isinstance(globals.TRANSFORM, str):
@@ -64,6 +71,7 @@ if __name__ == "__main__":
         MODEL_PARAMS["session"],
         transform,
         10,
+        globals.EMAGER_DATA_SHAPE,
     )
 
     # Generate validation data and labels
@@ -74,7 +82,7 @@ if __name__ == "__main__":
         transform,
         build_dir,
     )
-
+    pvd = pvd.reshape((-1, 1, *globals.EMAGER_DATA_SHAPE))
     pred = torch_model(torch.from_numpy(pvd)).detach().numpy()
     valid_samples = 10
     np.save(build_dir + "/input", pvd[:valid_samples])
@@ -102,7 +110,7 @@ if __name__ == "__main__":
     dataflow_steps = custom_build_steps.default_finn_flow_custom_ip()
     # dataflow_steps = custom_build_steps.finn_flow_only_deploy()
     # dataflow_steps = custom_build_steps.default_finn_flow_export_bd()
-    # dataflow_steps = build_cfg.default_build_dataflow_steps
+    # dataflow_steps = build_cfg.default_build_dataflow_steps[0:2]
 
     cfg = build.DataflowBuildConfig(
         steps=dataflow_steps,
@@ -110,7 +118,7 @@ if __name__ == "__main__":
         # start_step=dataflow_steps[-3],  # Only copy BD
         output_dir=build_dir,
         mvau_wwidth_max=36,
-        target_fps=100000,
+        target_fps=1000,
         synth_clk_period_ns=10.0,
         # fpga_part="xc7z020clg400-1",
         board=board_name,
@@ -126,9 +134,9 @@ if __name__ == "__main__":
             build_cfg.DataflowOutputType.DEPLOYMENT_PACKAGE,
         ],
         verify_steps=[
-           build_cfg.VerificationStepType.STREAMLINED_PYTHON,  # TopK breaks verify steps
-           build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
-           build_cfg.VerificationStepType.STITCHED_IP_RTLSIM,
+            build_cfg.VerificationStepType.STREAMLINED_PYTHON,  # TopK breaks verify steps
+            build_cfg.VerificationStepType.FOLDED_HLS_CPPSIM,
+            build_cfg.VerificationStepType.STITCHED_IP_RTLSIM,
         ],
         save_intermediate_models=True,
         verify_input_npy=build_dir + "input.npy",
@@ -138,6 +146,5 @@ if __name__ == "__main__":
     # Build dataflow cfg
     # If error during step_create_dataflow_partition, check if your model is too large
     # Also test if Conv2D layers have bias=False
-    build.build_dataflow_cfg(onnx_model, cfg)
 
-    sys.exit(0)
+    build.build_dataflow_cfg(onnx_model, cfg)
