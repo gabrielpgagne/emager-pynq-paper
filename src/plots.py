@@ -1,3 +1,5 @@
+
+import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
@@ -54,11 +56,9 @@ def plot_accuracy_vs_shots_per_subject(
     for i, r in enumerate(results):
         r[metric.value] = r[metric.value] * 100
         r = r[r["shots"] != -1]
-        sns.pointplot(r, x="shots", y=metric.value, linewidth=4.0, linestyles=styles[i // 10], label=f"Subject {i}")
+        sns.pointplot(r, x="shots", y=metric.value, linewidth=4.0, linestyles=styles[i // 10], label=f"Subject {i}", legend=False)
 
-    plt.legend(loc="lower right", ncol=2)
     plt.ylabel("Majority Vote Accuracy [%]")
-    plt.xlabel("Inter-session calibration shots")
 
 
 def plot_accuracy_vs_quant_per_subject(base_dir, shots, metric: utils.ModelMetric):
@@ -74,7 +74,6 @@ def plot_accuracy_vs_quant_per_subject(base_dir, shots, metric: utils.ModelMetri
             r, x="quantization", y=metric.value, linewidth=4.0, linestyles=styles[i  // 10], label=f"Subject {i}"
         )
 
-    plt.legend(loc="lower right", ncol=2)
     plt.ylabel("Majority Vote Accuracy [%]")
     plt.xlabel("Quantization bits")
 
@@ -143,7 +142,7 @@ def plot_quantization():
 def plot_pixelmap(dataset_root, subject, session, rep):
     data = ed.load_emager_data(dataset_root, subject, session)
     data = dp.preprocess_data(data)
-    image = data[0, rep, 0, :].reshape((4, 16))
+    image = data[0, rep, 12, :].reshape((4, 16))
     image = (image - np.min(image)) / (np.max(image) - np.min(image))
     plt.imshow(image)
     plt.axis("off")
@@ -161,15 +160,17 @@ def get_resources_vs_quant(quants, shots):
             val = utils.get_accelerator_resources(subject, quant, shots)
             vals[i].append(val)
             vals_rel[i].append(100 * val / 53200)
-    print(vals)
-    print([np.mean(v) for v in vals])
-    print([np.std(v) for v in vals])
+    # print(vals)
+    # print([np.mean(v) for v in vals])
+    # print([np.std(v) for v in vals])
 
     df = pd.DataFrame(
         {
             "Quantization": quants,
             "LUTs": [np.mean(v) for v in vals],
+            "LUTs STD": [np.std(v) for v in vals],
             "LUTs [%]": [np.mean(v) for v in vals_rel],
+            "LUTs STD [%]": [np.std(v) for v in vals_rel],
         }
     )
     ax1 = sns.pointplot(df, x="Quantization", y="LUTs")
@@ -185,14 +186,17 @@ def get_resources_vs_quant(quants, shots):
 
 
 if __name__ == "__main__":
-    sns.set_theme(font_scale=3) 
+    #sns.set_theme(font_scale=3) 
+    
+    font = {'size'   : 36}
+    matplotlib.rc('font', **font)
     
     # TODO: add axis labels, add legend, cleanup figures
 
-    # plt.figure()
-    # plot_pixelmap(g.EMAGER_DATASET_ROOT, 0, 1, 0)
-    # plt.savefig(g.OUT_DIR_ROOT + "img/pixelmap.png", bbox_inches='tight')
-    # exit()
+    plt.figure()
+    plot_pixelmap(g.EMAGER_DATASET_ROOT, 0, 1, 0)
+    plt.savefig(g.OUT_DIR_ROOT + "img/pixelmap.png", bbox_inches='tight')
+    exit()
     
     # ax = plot_quantization()
     # plt.grid(True, "both", "both")
@@ -208,43 +212,52 @@ if __name__ == "__main__":
     # plt.savefig(g.OUT_DIR_ROOT + "img/emg_processed.png", bbox_inches="tight")
 
     # accuracy_per_subject(g.OUT_DIR_STATS, -1, 8, utils.ModelMetric.ACC_MAJ_INTER)
-    # figsize = (32, 18)
+    
+    # figsize = (32, 16)
     # plt.figure(1,figsize=figsize)
     # # plt.subplot(4,1,1)
     # plt.grid(True, "both", "both")
     # plt.ylim(0, 100)
     # plot_accuracy_vs_quant_per_subject(g.OUT_DIR_STATS, -1, utils.ModelMetric.ACC_MAJ_INTER)
+    # plt.legend(loc="upper right", ncol=1, bbox_to_anchor=(1.2, 1.0))
+    
     # plt.savefig(g.OUT_DIR_ROOT + "img/accuracy_vs_quant.png", bbox_inches="tight")
     
+    # figsize = (32, 40)
     # plt.figure(2, figsize=figsize)
-    # # plt.subplot(4,1,2)
-    # plt.ylim(0, 100)
-    # plt.grid(True, "both", "both")
+    
+    # plt.subplot(3,1,1)
     # plot_accuracy_vs_shots_per_subject(g.OUT_DIR_STATS, -1, utils.ModelMetric.ACC_MAJ_INTER)
-    # plt.savefig(g.OUT_DIR_ROOT + "img/accuracy_vs_shots_all.png")
-
-    # plt.figure(3, figsize=figsize)
-    # # plt.subplot(4,1,3)
-    # plt.ylim(0, 100)
+    # plt.ylim(40, 100)
     # plt.grid(True, "both", "both")
+    # plt.legend(loc="upper right", ncol=1, bbox_to_anchor=(1.2, 1.0))
+    # plt.xlabel("(a)")
+
+    # # plt.figure(3, figsize=figsize)
+    # plt.subplot(3,1,2)
     # plot_accuracy_vs_shots_per_subject(g.OUT_DIR_STATS, 8, utils.ModelMetric.ACC_MAJ_INTER)
-    # plt.savefig(g.OUT_DIR_ROOT + "img/accuracy_vs_shots_8.png")
-
-    # plt.figure(4, figsize=figsize)
-    # # plt.subplot(4,1,4)
-    # plt.ylim(0, 100)
+    # plt.ylim(40, 100)
     # plt.grid(True, "both", "both")
+    # plt.xlabel("(b)")
+
+    # # plt.figure(4, figsize=figsize)
+    # plt.subplot(3,1,3)
     # plot_accuracy_vs_shots_per_subject(g.OUT_DIR_STATS, 4, utils.ModelMetric.ACC_MAJ_INTER)
-    # plt.savefig(g.OUT_DIR_ROOT + "img/accuracy_vs_shots_4.png")
+    # plt.ylim(40, 100)
+    # plt.grid(True, "both", "both")
+    # plt.xlabel("(c)")
+    
+    # plt.savefig(g.OUT_DIR_ROOT + "img/accuracy_vs_shots.png", bbox_inches='tight')
 
     # plot_accuracy_vs_shots_per_subject(
     #     g.OUT_DIR_STATS, -1, utils.ModelMetric.ACC_MAJ_INTER
     # )
     # plt.show()
     
-    raw_acc_vs_maj_acc(g.OUT_DIR_STATS, -1, [1, 2, 3, 4, 6, 8, 32])
+    # raw_acc_vs_maj_acc(g.OUT_DIR_STATS, -1, [1, 2, 3, 4, 6, 8, 32])
 
     # plt.figure(10,figsize=(24, 12))
     # qr = get_resources_vs_quant([2, 3, 4, 6, 8], -1)
+    # print(qr.to_latex())
     # plt.savefig(g.OUT_DIR_ROOT + "img/luts_vs_quantization.png", bbox_inches="tight")
     # plt.show()

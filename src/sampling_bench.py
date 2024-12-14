@@ -1,8 +1,10 @@
+import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 
 import pandas as pd
 
+import globals as g
 results = dict()
 with open("data/sampling_throughput.txt") as f:
     lines = f.readlines()
@@ -15,7 +17,11 @@ max_batch = results["Batchsize"][-1]
 
 results = pd.DataFrame(results)
 
-sns.set_theme(font_scale=2)
+font = {'size'   : 24}
+matplotlib.rc('font', **font)
+
+# sns.set_theme(font_scale=2)
+plt.figure(figsize=(16, 9))
 sns.lineplot(results[1:], x="Batchsize", y="sps", linewidth=2)
 plt.axhline(
     1000,
@@ -32,10 +38,8 @@ plt.axhline(
     linestyle="dashed",
 )
 
-plt.ylim(0, 8300)
+plt.ylim(0, 10000)
 plt.grid(True, "both", "both")
 plt.ylabel("Samples per second")
 plt.xlabel("Batch size")
-plt.savefig("output/img/sampling_throughput.png",bbox_inches="tight")
-
-plt.show()
+plt.savefig(g.OUT_DIR_ROOT + "img/sampling_throughput.png",bbox_inches="tight")

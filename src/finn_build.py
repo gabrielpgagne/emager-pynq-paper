@@ -179,7 +179,7 @@ if __name__ == "__main__":
     quants = [2, 3, 4, 6, 8]
     subjects = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
-    # subjects = [9]
+    subjects = [9]
     # quants = [4]
 
     for sub in subjects:

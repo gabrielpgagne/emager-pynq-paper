@@ -36,8 +36,10 @@ FINN_MODEL_PARAMS_DICT = {
 TARGET_EMAGER_PYNQ_PATH = "/home/xilinx/workspace/emager-pynq/"
 
 # OUT_DIR_ROOT = "./output_scnn_16_16_16_32_32_q/"
+OUT_DIR_ROOT = "./output_inter_subject/"
+# OUT_DIR_ROOT = "./output_scnn_16_16_16_32_32/"
 # OUT_DIR_ROOT = "./output_scnn/"
-OUT_DIR_ROOT = "./output_cnn/"
+# OUT_DIR_ROOT = "./output_cnn/"
 
 OUT_DIR_MODELS = "models/"
 OUT_DIR_STATS = "eval/"

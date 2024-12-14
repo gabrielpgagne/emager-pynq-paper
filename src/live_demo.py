@@ -3,6 +3,7 @@ import torch.cuda
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 from sklearn.model_selection import train_test_split
+import threading
 
 from emager_py.finn import remote_operations as ro
 import emager_py.screen_guided_training as sgt
@@ -16,11 +17,99 @@ from emager_py import utils
 import globals as g
 from finn_build import launch_finn_build
 
+import time
+import queue
+from tkinter import Tk, Label, Button
+import tkinter.ttk as ttk
+from PIL import Image, ImageTk
+
+
+def gui_readloop(hostname, images_path):
+    id_queue = queue.Queue()
+
+    def generate_ids():
+        r = er.EmagerRedis(hostname)
+        r.set_sampling_params(n_samples=1e6)
+        t = threading.Thread(
+            target=lambda: ro.run_remote_finn(
+                ro.connect_to_pynq(hostname=hostname),
+                g.TARGET_EMAGER_PYNQ_PATH,
+                "python3 client.py",
+            ),
+            args=(),
+            daemon=True,
+        )
+        t.start()
+
+        preds_buffer = []
+        while t.is_alive():
+            pred_bytes = r.pop_fifo(r.PREDICTIONS_FIFO_KEY, timeout=1)
+            pred = r.decode_label_bytes(pred_bytes)
+            print(f"Received predictions: {pred}")
+
+            preds_buffer.append(pred.item(0))
+            if len(preds_buffer) >= 10:  # 25 ms per prediction -> 250 ms
+                pred_mv = np.argmax(np.bincount(preds_buffer))  # majority vote
+                preds_buffer = []
+                id_queue.put(pred_mv)
+
+    images_ids = [
+        "Hand_Close",
+        "Thumbs_Up",
+        "Chuck_Grip",
+        "No_Motion",
+        "Index_Pinch",
+        "Index_Extension",
+    ]
+    image_files = {
+        i: Image.open(f"{images_path}/{p}.png").resize((640, 320))
+        for i, p in enumerate(images_ids)
+    }
+
+    # Function to update the image in the GUI
+    def update_image():
+        while not id_queue.empty():
+            new_id = id_queue.get()
+            image = image_files[new_id]
+            tk_image = ImageTk.PhotoImage(image)
+            label.config(image=tk_image)
+            label.image = tk_image  # Prevent garbage collection
+            id_label.config(text=f"{images_ids[new_id]} (ID {new_id})")
+        root.after(100, update_image)  # Schedule the function to run again
+
+    # Create the Tkinter GUI
+    root = ttk.TTk()
+    root.title("EMaGerZ Prediction Viewer")
+
+    # Label to display the image
+    label = Label(root)
+    label.pack(pady=20)
+
+    # Label to display the current ID
+    id_label = Label(root, text="Waiting for remote device...", font=("Arial", 14))
+    id_label.pack(pady=10)
+
+    # Button to quit the application
+    quit_button = Button(root, text="Quit", command=root.destroy)
+    quit_button.pack(pady=10)
+
+    # Start the ID generation thread
+    thread = threading.Thread(target=generate_ids, daemon=True)
+    thread.start()
+
+    # Start updating the GUI# Start updating the GUI\update_image()
+    update_image()
+
+    # Run the Tkinter event loop
+    root.mainloop()
+
+
 if __name__ == "__main__":
     utils.set_logging()
 
     # hostname = er.get_docker_redis_ip()
-    hostname = "pynq"
+    hostname = "192.168.0.99"
+    images_path = "output/gestures/"
 
     subject = 13
     session = 1
@@ -34,12 +123,16 @@ if __name__ == "__main__":
     r = er.EmagerRedis(hostname)
     r.set_pynq_params(g.TRANSFORM)
     r.set_rhd_sampler_params(
-        bitstream=ro.DEFAULT_EMAGER_PYNQ_PATH
-        + "bitfile/finn-accel.bit"
+        low_bw=5,
+        hi_bw=450,
+        en_dsp=1,
+        fp_dsp=20,
+        bitstream=ro.DEFAULT_EMAGER_PYNQ_PATH + "bitfile/finn-accel.bit",
         # bitstream=""
     )
+    r.clear_data()
 
-    c = ro.connect_to_pynq()
+    c = ro.connect_to_pynq(hostname=hostname)
 
     def resume_training_cb(gesture_id):
         ro.sample_training_data(
@@ -99,7 +192,9 @@ if __name__ == "__main__":
         # TODO doesnt seem to work
         sgt.EmagerGuidedTraining(
             1,
-            gestures_path="output/gestures/",
+            gestures=[2, 14, 26, 1, 8, 30],
+            training_time=1,
+            gestures_path=images_path,
             resume_training_callback=resume_training_cb,
             callback_arg="gesture",
         ).start()
@@ -117,10 +212,4 @@ if __name__ == "__main__":
             for idx in idxs:
                 r.push_sample(calib_data[idx], calib_labels[idx])
 
-    # After training just remotely run the live test client
-    r.set_sampling_params(n_samples=-1)
-    ro.run_remote_finn(
-        ro.connect_to_pynq(), g.TARGET_EMAGER_PYNQ_PATH, "python3 client.py"
-    )
-
-    # TODO script to re-calibrate with embeddings, maybe button input on PYNQ board?
+    gui_readloop(hostname, images_path)

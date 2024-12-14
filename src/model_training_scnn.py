@@ -246,24 +246,25 @@ if __name__ == "__main__":
     
     # ============ Train all models ==========
     
-    # cross_validations = list(zip(ed.get_repetitions()[::2], ed.get_repetitions()[1::2]))
-    # quantizations = [1, 2, 3, 4, 6, 8, 32]
+    cross_validations = list(zip(ed.get_repetitions()[::2], ed.get_repetitions()[1::2]))
+    quantizations = [1, 2, 3, 4, 6, 8, 32]
     
-    # train_all_scnn(cross_validations, quantizations, etrans.root_processing)
+    train_all_scnn(cross_validations, quantizations, etrans.root_processing)
+
     # test_all_scnn(cross_validations, quantizations, etrans.root_processing)
 
     # ============ Single model parameters ==========
     
-    SUBJECT = 9
-    SESSION = 1
-    VALID_REPS = [0, 1]
-    QUANT = 4
+    # SUBJECT = 9
+    # SESSION = 1
+    # VALID_REPS = [0, 1]
+    # QUANT = 4
     
-    # ========= Train a single model ==========
+    # # ========= Train a single model ==========
     
-    model, results = train_scnn(g.EMAGER_DATASET_ROOT, SUBJECT, 1, VALID_REPS, etrans.root_processing, QUANT, [-1])
-    utils.save_model(model, results, SUBJECT, SESSION, VALID_REPS, QUANT)
-    print(results)
+    # model, results = train_scnn(g.EMAGER_DATASET_ROOT, SUBJECT, 1, VALID_REPS, etrans.root_processing, QUANT, [-1])
+    # utils.save_model(model, results, SUBJECT, SESSION, VALID_REPS, QUANT)
+    # print(results)
     
     # ========= Test a single model ==========
     
