@@ -78,7 +78,7 @@ def gui_readloop(hostname, images_path):
         root.after(100, update_image)  # Schedule the function to run again
 
     # Create the Tkinter GUI
-    root = ttk.TTk()
+    root = Tk()
     root.title("EMaGerZ Prediction Viewer")
 
     # Label to display the image
@@ -108,7 +108,7 @@ if __name__ == "__main__":
     utils.set_logging()
 
     # hostname = er.get_docker_redis_ip()
-    hostname = "192.168.0.99"
+    hostname = "pynq.local"
     images_path = "output/gestures/"
 
     subject = 13
@@ -186,7 +186,7 @@ if __name__ == "__main__":
     # =========== TESTING ==============
 
     # Get some calibration data
-    USE_LIVE_DATA = False
+    USE_LIVE_DATA = True
 
     if USE_LIVE_DATA:
         # TODO doesnt seem to work
