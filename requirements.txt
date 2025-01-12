@@ -2,4 +2,3 @@
 pandas
 seaborn
 pyqt5
-bluepy
