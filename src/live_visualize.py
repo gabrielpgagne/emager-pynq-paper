@@ -127,14 +127,14 @@ if __name__ == "__main__":
 
     FS = 1000
     BATCH = 50
-    HOST = "192.168.0.99"
+    HOST = "pynq.local"
 
     r = er.EmagerRedis(HOST)
     r.set_sampling_params(FS, BATCH, 100000000)
     r.set_rhd_sampler_params(
-        low_bw=10,
-        hi_bw=100,
-        en_dsp=1,
+        low_bw=15,
+        hi_bw=350,
+        # en_dsp=1,
         bitstream="/home/xilinx/workspace/emager-pynq/bitfile/finn-accel.bit",
         # bitstream="",
     )
@@ -150,26 +150,29 @@ if __name__ == "__main__":
     print("Starting client and oscilloscope...")
     stream_client = streamers.RedisStreamer(HOST, False)
 
-    # data = []
-    # t0 = time.time()
-    # while len(data) < 5 * FS:
-    #     new_data = stream_client.read()
-    #     if len(new_data) == 0:
-    #         continue
-    #     if len(data) == 0:
-    #         t0 = time.time()
-    #     data.extend(new_data)
-    #     print(len(data))
-    # true_fs = len(data) / (time.time() - t0)
-    # print(f"Elapsed time: {time.time() - t0:.3f} s")
-    # print(f"Actual sampling rate: {true_fs:.3f} Hz")
+    data = []
+    t0 = time.time()
+    while len(data) < 5 * FS:
+        new_data = stream_client.read()
+        if len(new_data) == 0:
+            continue
+        if len(data) == 0:
+            t0 = time.time()
+        data.extend(new_data)
+        print(len(data))
+    true_fs = len(data) / (time.time() - t0)
+    print(f"Elapsed time: {time.time() - t0:.3f} s")
+    print(f"Actual sampling rate: {true_fs:.3f} Hz")
 
-    # data = np.array(data).reshape(-1, 64)
+    data = np.array(data).reshape(-1, 64)
 
-    # # filt = signal.iirnotch(60, 10, true_fs)
-    # # data = signal.filtfilt(filt[0], filt[1], data, axis=0)
+    # filt = signal.iirnotch(60, 10, true_fs)
+    # data = signal.filtfilt(filt[0], filt[1], data, axis=0)
 
-    # data0 = data[:, 0]
+    for i in range(16):
+        for j in range(4):
+            plt.subplot(4, 16, 16 * j + i + 1)
+            plt.plot(data[:, 16 * j + i])
 
     # plt.figure()
     # plt.plot(data0)
@@ -180,7 +183,7 @@ if __name__ == "__main__":
     # f = fft.fftfreq(len(data0), 1 / FS)[: len(data0) // 2]
     # plt.figure()
     # plt.plot(f, 20 * np.log(np.abs(y)))
-    # plt.show()
+    plt.show()
 
-    oscilloscope = RealTimeOscilloscope(stream_client, 64, FS, 3, 30)
-    oscilloscope.run()
+    # oscilloscope = RealTimeOscilloscope(stream_client, 64, FS, 3, 30)
+    # oscilloscope.run()

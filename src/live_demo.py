@@ -123,9 +123,9 @@ if __name__ == "__main__":
     r = er.EmagerRedis(hostname)
     r.set_pynq_params(g.TRANSFORM)
     r.set_rhd_sampler_params(
-        low_bw=5,
-        hi_bw=450,
-        en_dsp=1,
+        low_bw=15,
+        hi_bw=350,
+        # en_dsp=1,
         fp_dsp=20,
         bitstream=ro.DEFAULT_EMAGER_PYNQ_PATH + "bitfile/finn-accel.bit",
         # bitstream=""
