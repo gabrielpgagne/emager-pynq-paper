@@ -152,7 +152,7 @@ if __name__ == "__main__":
 
     data = []
     t0 = time.time()
-    while len(data) < 5 * FS:
+    while len(data) < 10 * FS:
         new_data = stream_client.read()
         if len(new_data) == 0:
             continue

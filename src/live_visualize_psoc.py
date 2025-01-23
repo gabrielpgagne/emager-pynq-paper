@@ -129,10 +129,10 @@ if __name__ == "__main__":
 
     print("Starting client and oscilloscope...")
     stream_client = streamers.SerialStreamer("/dev/ttyACM0", 1500000)
-    while True:
-        data = stream_client.read()
-        if len(data) == 0:
-            continue
-        print(data.size)
-    # oscilloscope = RealTimeOscilloscope(stream_client, 64, FS, 3, 30)
-    # oscilloscope.run()
+    # while True:
+    #     data = stream_client.read()
+    #     if len(data) == 0:
+    #         continue
+    #     print(data.size)
+    oscilloscope = RealTimeOscilloscope(stream_client, 64, FS, 3, 30)
+    oscilloscope.run()

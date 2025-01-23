@@ -2,8 +2,10 @@ import lightning as L
 import torch.cuda
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
-from sklearn.model_selection import train_test_split
 import threading
+import pandas as pd
+import json
+import os
 
 from emager_py.finn import remote_operations as ro
 import emager_py.screen_guided_training as sgt
@@ -16,11 +18,10 @@ from emager_py import utils
 
 import globals as g
 from finn_build import launch_finn_build
+import utils
 
-import time
 import queue
 from tkinter import Tk, Label, Button
-import tkinter.ttk as ttk
 from PIL import Image, ImageTk
 
 
@@ -105,7 +106,7 @@ def gui_readloop(hostname, images_path):
 
 
 if __name__ == "__main__":
-    utils.set_logging()
+    # utils.set_logging()
 
     # hostname = er.get_docker_redis_ip()
     hostname = "pynq.local"
@@ -116,7 +117,7 @@ if __name__ == "__main__":
     quant = 8
     shots = 10
     transform = etrans.transforms_lut[g.TRANSFORM]
-    finetune_data_dir = "data/finetune/"
+    finetune_data_dir = "data/EMAGER/"
     n_reps = 1
     rep_time = 3
 
@@ -145,43 +146,57 @@ if __name__ == "__main__":
 
     # ========== TRAINING ==========
 
-    # r.clear_data()
+    sgt.EmagerGuidedTraining(
+        n_reps,
+        gestures=[2, 14, 26, 1, 8, 30],
+        gestures_path="output/gestures/",
+        resume_training_callback=resume_training_cb,
+        callback_arg="gesture",
+    ).start()
 
-    # sgt.EmagerGuidedTraining(
-    #     n_reps,
-    #     gestures_path="output/gestures/",
-    #     resume_training_callback=resume_training_cb,
-    #     callback_arg="gesture",
-    # ).start()
+    # raw data -> processed DataLoader
+    data = r.dump_labelled_to_numpy()
+    print(data.shape)
 
-    # # raw data -> processed DataLoader
-    # data = r.dump_labelled_to_numpy()
-    # print(data.shape)
+    data_dir = ed.process_save_dataset(
+        data, finetune_data_dir, transform, subject, session
+    )
+    data = ed.load_emager_data(data_dir, subject, session)
 
-    # data_dir = ed.process_save_dataset(
-    #     data, finetune_data_dir, transform, subject, session
-    # )
-    # data = ed.load_emager_data(data_dir, subject, session)
+    data, labels = dp.extract_labels_and_roll(data, 2)
+    data = data.astype(np.float32)
+    train_triplets = dp.generate_triplets(data, labels, 5000)
+    train_triplets = [
+        torch.from_numpy(t).reshape((-1, 1, *g.EMAGER_DATA_SHAPE))
+        for t in train_triplets
+    ]
+    train_dl = DataLoader(TensorDataset(*train_triplets), batch_size=32, shuffle=True)
 
-    # data, labels = dp.extract_labels_and_roll(data, 2)
-    # data = data.astype(np.float32)
-    # train_triplets = dp.generate_triplets(data, labels, 5000)
-    # train_triplets = [
-    #     torch.from_numpy(t).reshape((-1, 1, *g.EMAGER_DATA_SHAPE))
-    #     for t in train_triplets
-    # ]
-    # train_dl = DataLoader(TensorDataset(*train_triplets), batch_size=32, shuffle=True)
+    # Train
+    trainer = L.Trainer(
+        accelerator="auto" if torch.cuda.is_available() or quant == -1 else "cpu",
+        enable_checkpointing=False,
+        logger=True,
+        max_epochs=10,
+    )
+    model = etm.EmagerSCNN(quant)
+    trainer.fit(model, train_dl)
 
-    # # Train
-    # trainer = L.Trainer(
-    #     accelerator="auto" if torch.cuda.is_available() or quant == -1 else "cpu",
-    #     enable_checkpointing=False,
-    #     logger=True,
-    #     max_epochs=10,
-    # )
-    # model = etm.EmagerSCNN(quant)
-    # trainer.fit(model, train_dl)
-    # launch_finn_build(subject, quant, shots, g.TRANSFORM)
+    utils.save_model(model, pd.DataFrame(), subject, session, [0], quant)
+    os.makedirs(g.OUT_DIR_ROOT + g.OUT_DIR_FINN, exist_ok=True)
+
+    params_dict = {
+        "subject": subject,
+        "quantization": quant,
+        "shots": shots,
+        "session": session,
+        "repetition": [0],
+        "transform": g.TRANSFORM,
+    }
+    with open(g.OUT_DIR_ROOT + g.OUT_DIR_FINN + "finn_config.json", "w") as f:
+        json.dump(params_dict, f)
+    utils.lock_finn()
+    launch_finn_build()
 
     # =========== TESTING ==============
 
