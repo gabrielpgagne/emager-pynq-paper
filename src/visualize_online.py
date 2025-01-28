@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, Qt
 
 import emager_py.streamers as streamers
+import globals as g
 
 
 class RealTimeOscilloscope:
@@ -105,7 +106,7 @@ class RealTimeOscilloscope:
         self.tot_samples += nb_pts
         t = time.time()
         log.info(
-            f"(dt={t-self.timestamp:.3f}) Average fs={self.tot_samples/(t-self.t0):.3f}"
+            f"(dt={t - self.timestamp:.3f}) Average fs={self.tot_samples / (t - self.t0):.3f}"
         )
         self.timestamp = t
 
@@ -127,8 +128,8 @@ if __name__ == "__main__":
 
     FS = 1000
     BATCH = 25
-    HOST = "pynq.local"
-    #
+    HOST = g.PYNQ_HOSTNAME
+
     r = er.EmagerRedis(HOST)
     r.set_sampling_params(FS, BATCH, 100000000)
     r.set_rhd_sampler_params(
@@ -163,6 +164,8 @@ if __name__ == "__main__":
     print(f"Actual sampling rate: {true_fs:.3f} Hz")
 
     data = np.array(data).reshape(-1, 64)
+    noise_floor = np.sqrt(np.mean((data - np.mean(data)) ** 2))
+    print(f"Noise floor: {noise_floor:.2f}")
 
     # filt = signal.iirnotch(60, 10, true_fs)
     # data = signal.filtfilt(filt[0], filt[1], data, axis=0)

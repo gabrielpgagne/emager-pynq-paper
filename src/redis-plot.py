@@ -4,13 +4,15 @@ from scipy import signal
 import emager_py.finn.remote_operations as ro
 import threading
 import time
+
 from emager_py.streamers import RedisStreamer
+import globals as g
 
 if __name__ == "__main__":
     FS = 1000
     BATCH = 50
 
-    HOST = "192.168.0.99"
+    HOST = g.PYNQ_HOSTNAME
 
     c = ro.connect_to_pynq(hostname=HOST)
     t = threading.Thread(

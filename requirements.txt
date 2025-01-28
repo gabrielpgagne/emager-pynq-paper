@@ -2,3 +2,5 @@
 pandas
 seaborn
 pyqt5
+fabric
+bleak

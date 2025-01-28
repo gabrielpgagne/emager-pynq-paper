@@ -111,7 +111,7 @@ if __name__ == "__main__":
     # utils.set_logging()
 
     # hostname = er.get_docker_redis_ip()
-    hostname = "pynq.local"
+    hostname = g.PYNQ_HOSTNAME
     images_path = "output/gestures/"
 
     gestures = [2, 14, 26, 1, 8, 30]

@@ -281,7 +281,7 @@ if __name__ == "__main__":
     # ============ Single model parameters ==========
 
     SUBJECT = 13
-    SESSION = 1
+    SESSION = 2
     VALID_REPS = [0]
     QUANT = 4
 
