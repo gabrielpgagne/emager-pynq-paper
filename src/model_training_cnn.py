@@ -33,16 +33,15 @@ def test_cnn(
     calib_dataloader: None | DataLoader,
     transform: str,
 ):
-
     n_votes = 150 // etrans.get_transform_decimation(transform)
 
     if calib_dataloader is not None:
         model.set_finetune()
         trainer.fit(model, calib_dataloader)
-    
+
     preds = None
     labels = None
-    
+
     # Test non-MV accuracy
     for x, y_true in test_dataloader:
         logits = model(x).cpu().detach().numpy()
@@ -54,11 +53,11 @@ def test_cnn(
         else:
             preds = np.hstack((preds, y))
             labels = np.hstack((labels, y))
-    
+
     # Test majority vote accuracy
     label_majority_voted = emv.majority_vote(labels, n_votes)
     pred_majority_voted = emv.majority_vote(preds, n_votes)
-    
+
     raw_acc = accuracy_score(labels, preds)
     majority_acc = accuracy_score(label_majority_voted, pred_majority_voted)
 
@@ -79,25 +78,26 @@ def train_cnn(data_root, subject, train_session, val_reps, transform, quant):
         logger=False,
         max_epochs=10,
     )
-    train, test_intra = (
-        etd.get_lnocv_dataloaders(
-            data_root, subject, train_session, val_reps, transform=transform
-        )
+    train, test_intra = etd.get_lnocv_dataloaders(
+        data_root, subject, train_session, val_reps, transform=transform
     )
-    test_inter, calib_inter = (
-        etd.get_lnocv_dataloaders(
-            data_root, subject, 2 if int(train_session) == 1 else 1, val_reps, absda="none", transform=transform
-        )
+    test_inter, calib_inter = etd.get_lnocv_dataloaders(
+        data_root,
+        subject,
+        2 if int(train_session) == 1 else 1,
+        val_reps,
+        absda="none",
+        transform=transform,
     )
 
     # Train and test
-    model = etm.EmagerCNN((4,16), 6, quant)
+    model = etm.EmagerCNN((4, 16), 6, quant)
     trainer.fit(model, train)
     intra_test_results = test_cnn(model, trainer, test_intra, None, transform)
     inter_test_results = test_cnn(model, trainer, test_inter, calib_inter, transform)
     test_results = pd.DataFrame(
         {
-            "shots": [-1], # patch
+            "shots": [-1],  # patch
             "acc_raw_intra": intra_test_results["acc_raw"],
             "acc_maj_intra": intra_test_results["acc_maj"],
             "acc_raw_inter": inter_test_results["acc_raw"],
@@ -160,17 +160,22 @@ def test_all_cnn(cross_validations: list[str], quantizations: list[int], transfo
                         enable_checkpointing=False,
                         logger=False,
                     )
-                    train, test_intra = (
-                        etd.get_lnocv_dataloaders(
-                            g.EMAGER_DATASET_ROOT, SUBJECT, ses, valid_reps, transform=transform
-                        )
+                    train, test_intra = etd.get_lnocv_dataloaders(
+                        g.EMAGER_DATASET_ROOT,
+                        SUBJECT,
+                        ses,
+                        valid_reps,
+                        transform=transform,
                     )
-                    calib_inter, test_inter = (
-                        etd.get_lnocv_dataloaders(
-                            g.EMAGER_DATASET_ROOT, SUBJECT, "001" if ses == "002" else "002", valid_reps, absda="none", transform=transform
-                        )
+                    calib_inter, test_inter = etd.get_lnocv_dataloaders(
+                        g.EMAGER_DATASET_ROOT,
+                        SUBJECT,
+                        "001" if ses == "002" else "002",
+                        valid_reps,
+                        absda="none",
+                        transform=transform,
                     )
-                    model = etm.EmagerCNN((4,16), 6, quant)
+                    model = etm.EmagerCNN((4, 16), 6, quant)
                     model = utils.load_model(model, subj, ses, valid_reps, quant)
                     intra_test_results = test_cnn(
                         model, trainer, test_intra, train, transform
@@ -194,19 +199,34 @@ if __name__ == "__main__":
 
     cross_validations = list(zip(ed.get_repetitions()[::2], ed.get_repetitions()[1::2]))
     # quantizations = [1, 2, 3, 4, 6, 8, 32]
-    
-    SUBJECT = 9
+
+    SUBJECT = 13
     SESSION = 1
-    VALID_REPS = [0, 1]
-    QUANT = 1
-    
-    for ses in [1, 2]:
-        for reps in cross_validations:
-            for q in [1,2,3,4,6,8]:
-                model, results = train_cnn(g.EMAGER_DATASET_ROOT, SUBJECT, ses, reps, etrans.root_processing, q)
+    VALID_REPS = [0]
+    QUANT = 4
+
+    model, results = train_cnn(
+        g.EMAGER_DATASET_ROOT,
+        SUBJECT,
+        SESSION,
+        VALID_REPS,
+        etrans.root_processing,
+        QUANT,
+    )
+    print(results)
+    exit()
+    # for ses in [1, 2]:
+    for ses in [SESSION]:
+        # for reps in cross_validations:
+        for reps in [VALID_REPS]:
+            # for q in [1, 2, 3, 4, 6, 8]:
+            for q in [QUANT]:
+                model, results = train_cnn(
+                    g.EMAGER_DATASET_ROOT, SUBJECT, ses, reps, etrans.root_processing, q
+                )
                 print(results)
                 utils.save_model(model, results, SUBJECT, ses, reps, q)
-                
+
     # model, results = train_cnn(g.EMAGER_DATASET_ROOT, SUBJECT, SESSION, VALID_REPS, etrans.root_processing, QUANT)
     # print(results)
     # utils.save_model(model, results, SUBJECT, SESSION, VALID_REPS, QUANT)
