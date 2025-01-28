@@ -129,9 +129,10 @@ if __name__ == "__main__":
     FS = 1000
     BATCH = 25
     HOST = g.PYNQ_HOSTNAME
+    TIME = 5
 
     r = er.EmagerRedis(HOST)
-    r.set_sampling_params(FS, BATCH, 100000000)
+    r.set_sampling_params(FS, BATCH, TIME * FS + BATCH)
     r.set_rhd_sampler_params(
         low_bw=15,
         hi_bw=350,
@@ -149,26 +150,28 @@ if __name__ == "__main__":
     stream_client = streamers.RedisStreamer(HOST, False)
 
     data = []
-    t0 = time.time()
-    while len(data) < 5 * FS:
+    t0 = time.perf_counter()
+    while time.perf_counter() - t0 < TIME:
         new_data = stream_client.read()
         if len(new_data) == 0:
             continue
         if len(data) == 0:
-            t0 = time.time()
+            t0 = time.perf_counter()
         data.extend(new_data)
         print(len(data))
+    dt = time.perf_counter() - t0
+    c.close()
 
-    true_fs = len(data) / (time.time() - t0)
-    print(f"Elapsed time: {time.time() - t0:.3f} s")
+    true_fs = len(data) / dt
+    print(f"Elapsed time: {dt:.3f} s")
     print(f"Actual sampling rate: {true_fs:.3f} Hz")
 
     data = np.array(data).reshape(-1, 64)
     noise_floor = np.sqrt(np.mean((data - np.mean(data)) ** 2))
     print(f"Noise floor: {noise_floor:.2f}")
 
-    # filt = signal.iirnotch(60, 10, true_fs)
-    # data = signal.filtfilt(filt[0], filt[1], data, axis=0)
+    filt = signal.iirnotch(60, 20, 1000)
+    data = signal.filtfilt(filt[0], filt[1], data, axis=0)
 
     for i in range(16):
         for j in range(4):
@@ -176,7 +179,7 @@ if __name__ == "__main__":
             plt.plot(data[:, 16 * j + i])
     from scipy import fft
 
-    for i in range(10):
+    for i in range(1):
         data0 = data[:, i]
         y = fft.fft(data0)[: len(data0) // 2]
         f = fft.fftfreq(len(data0), 1 / FS)[: len(data0) // 2]
@@ -187,5 +190,3 @@ if __name__ == "__main__":
 
     # oscilloscope = RealTimeOscilloscope(stream_client, 64, FS, 3, 30)
     # oscilloscope.run()
-
-    c.close()

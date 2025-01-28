@@ -203,7 +203,7 @@ if __name__ == "__main__":
     SUBJECT = 13
     SESSION = 1
     VALID_REPS = [0]
-    QUANT = 4
+    QUANT = -1
 
     model, results = train_cnn(
         g.EMAGER_DATASET_ROOT,

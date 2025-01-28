@@ -11,7 +11,9 @@ import torch.cuda
 from torch.utils.data import DataLoader
 import lightning as L
 
+import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 import emager_py.dataset as ed
 import emager_py.data_processing as dp
@@ -60,6 +62,7 @@ def test_scnn(
         tmp_dict = {
             "acc_raw": [],
             "acc_maj": [],
+            "conf_mat": [],
         }
         for _ in range(n_trials):
             # n_shots_embeddings = dp.get_n_shot_embeddings(embeddings, labels, 6, shot)
@@ -98,10 +101,14 @@ def test_scnn(
             raw_acc = accuracy_score(test_labels, test_preds)
             majority_acc = accuracy_score(test_labels_mv, test_preds_mv)
 
+            cm = confusion_matrix(test_labels, test_preds, normalize="true")
+            disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+            disp.plot()
+            # plt.show()
             # Do dictionary stuff
             tmp_dict["acc_raw"].append(raw_acc)
             tmp_dict["acc_maj"].append(majority_acc)
-
+            tmp_dict["conf_mat"].append(cm)
             if shot == -1:
                 # no point in reiterating
                 break
@@ -281,9 +288,9 @@ if __name__ == "__main__":
     # ============ Single model parameters ==========
 
     SUBJECT = 13
-    SESSION = 2
+    SESSION = 1
     VALID_REPS = [0]
-    QUANT = 4
+    QUANT = -1
 
     # ========= Train a single model ==========
 
@@ -298,7 +305,7 @@ if __name__ == "__main__":
     )
     utils.save_model(model, results, SUBJECT, SESSION, VALID_REPS, QUANT)
     print(results)
-
+    plt.show()
     # ========= Test a single model ==========
 
     # _, calib_intra, test_intra, calib_inter, test_inter = etd.get_triplet_dataloaders(

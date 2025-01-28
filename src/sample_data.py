@@ -12,7 +12,7 @@ import globals as g
 
 def sample_sgt():
     SUBJECT = 13
-    SESSION = 2
+    SESSION = 1
     N_REPS = 5
     REP_TIME = 5
 
