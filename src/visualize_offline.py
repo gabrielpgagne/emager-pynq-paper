@@ -6,15 +6,41 @@ import emager_py.dataset as ed
 import emager_py.transforms as et
 import globals as g
 
-if __name__ == "__main__":
-    SUBJECT = 13
-    SESSION = 1
 
-    GESTURE = 5
+def heatmap(emg):
+    plt.figure()
+    emg = et.default_processing(emg)
+
+    for gesture in range(emg.shape[0]):
+        emg_g = emg[gesture : gesture + 1]
+        emg_g = emg_g.reshape(-1, 4, 16)
+        emg_g = np.mean(emg_g, axis=0)
+
+        print(
+            f"({gesture}) mean {np.mean(emg_g)}, std {np.std(emg_g)}, max {np.max(emg_g)}, min {np.min(emg_g)}"
+        )
+        plt.subplot(6, 1, gesture + 1)
+        plt.imshow(emg_g, vmin=0, vmax=200)
+        plt.ylabel(f"{gesture}")
+        plt.xticks([])
+        plt.yticks([])
+    # plt.colorbar()
+    plt.show()
+
+
+if __name__ == "__main__":
+    SUBJECT = 1
+    SESSION = 2
+
+    GESTURE = 2
     REPETITION = 0
 
     data = ed.load_emager_data(g.EMAGER_DATASET_ROOT, SUBJECT, SESSION)
     # data = et.default_processing(data)
+
+    # heatmap(data)
+
+    data = data[GESTURE : GESTURE + 1]
 
     print("Loaded data with shape:", data.shape)
 
