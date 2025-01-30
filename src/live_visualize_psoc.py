@@ -1,25 +1,91 @@
 import time
 import numpy as np
-import threading
 import logging as log
 from scipy import signal
 
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtGui
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer, Qt
 
-import emager_py.streamers as streamers
+from PyQt6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QVBoxLayout,
+    QWidget,
+    QGridLayout,
+    QPushButton,
+)
+from PyQt6.QtCore import QTimer, Qt, QThread, pyqtSignal
+
+import serial
 
 
-class RealTimeOscilloscope:
+def decode_buffer(data: np.ndarray):
+    """
+    data is a buffer of uint8 with size (n*128)
+
+    Ch0 LSb is set to 0, the rest are set to 1
+
+    Returns the decoded EMG data with shape (n, 64)
+    """
+    n = int(len(data) // 128)
+    idx = np.argwhere(data & 1 == 0)
+
+    # Check even indices first
+    even_idx = idx[idx % 2 == 0]
+    roll = even_idx.item(0) if len(even_idx) == n else -1
+
+    # Only check odd indices if even indices failed
+    if roll == -1:
+        odd_idx = idx[idx % 2 == 1]
+        roll = odd_idx.item(0) if len(odd_idx) == n else -1
+
+    if roll == -1:
+        return np.zeros((0, 64), dtype=np.int16)
+
+    rolled = np.roll(data, -roll * n)
+    return np.frombuffer(rolled, dtype="<i2").reshape(-1, 64)
+
+
+# Worker Thread to Read Serial Data
+class SerialReader(QThread):
+    data_received = pyqtSignal(np.ndarray)  # Signal to send data to GUI
+
+    def __init__(self, port, baudrate=1500000, parent=None):
+        super().__init__(parent)
+        self.port = port
+        self.baudrate = baudrate
+        self.running = True  # Control flag
+
+    def run(self):
+        """Continuously read data from the serial port"""
+        try:
+            with serial.Serial(self.port, self.baudrate, timeout=0.1) as ser:
+                data = []
+                while self.running:
+                    # packets_to_read = ser.in_waiting // 128
+                    # if packets_to_read == 0:
+                    #     continue
+                    data_bytes = np.frombuffer(ser.read(128), dtype=np.uint8)
+                    data.extend(decode_buffer(data_bytes))
+                    if len(data) >= 50:
+                        print(f"Sending {len(data)} samples")
+                        self.data_received.emit(np.array(data).T)  # Send data to GUI
+                        data = []
+        except serial.SerialException as e:
+            print(f"Serial Error: {e}")
+
+    def stop(self):
+        """Stop the thread"""
+        self.running = False
+        self.quit()
+        self.wait()
+
+
+class SerialPlotter(QMainWindow):
     def __init__(
         self,
-        streamer: streamers.EmagerStreamerInterface,
-        n_ch: int,
-        signal_fs: float,
-        accumulate_t: float,
-        refresh_rate: float,
+        port: str,
+        remap: bool,
     ):
         """
         Create the Oscilloscope.
@@ -30,109 +96,97 @@ class RealTimeOscilloscope:
         - accumulate_t: x-axis length [s]
         - refresh_rate: oscilloscope refresh rate [Hz]
         """
-        self.streamer = streamer
-        self.n_ch = n_ch
-        self.data_points = int(accumulate_t * signal_fs)
-        self.samples_per_refresh = signal_fs // refresh_rate
+        super().__init__()
 
-        print(
-            f"Data points: {self.data_points}, samples per refresh: {self.samples_per_refresh}"
+        # Initialize Serial Reader Thread
+        self.serial_thread = SerialReader(port, 1500000)
+        self.serial_thread.data_received.connect(self.update_plot)  # Connect signal
+
+        # GUI Layout
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
+        layout = QVBoxLayout()
+
+        # Grid layout for multiple subplots
+        self.grid_layout = QGridLayout()
+        layout.addLayout(self.grid_layout)
+
+        self.start_serial()
+
+        self.central_widget.setLayout(layout)
+
+        self.buffer_size = 5000
+        self.data_buffer = np.zeros((64, self.buffer_size))
+        self.channel_map = (
+            [10, 22, 12, 24, 13, 26, 7, 28, 1, 30, 59, 32, 53, 34, 48, 36]
+            + [62, 16, 14, 21, 11, 27, 5, 33, 63, 39, 57, 45, 51, 44, 50, 40]
+            + [8, 18, 15, 19, 9, 25, 3, 31, 61, 37, 55, 43, 49, 46, 52, 38]
+            + [6, 20, 4, 17, 3, 23, 0, 29, 60, 35, 58, 41, 56, 47, 54, 42]
         )
 
-        # Create a time axis
-        self.t = np.linspace(0, accumulate_t, self.data_points)
-
-        # Initialize the data buffer for each signal
-        self.data = [np.zeros(self.data_points) for _ in range(n_ch)]
-
-        # Create the application
-        self.app = QApplication([])
-
-        # Create a window
-        self.win = pg.GraphicsLayoutWidget()
-        self.win.setWindowTitle("Real-Time Oscilloscope")
-        self.win.setBackground(QtGui.QColor(255, 255, 255))  # white: (255, 255, 255)
-
-        # Define the number of rows and columns in the grid
-        num_rows = 16
-
-        # Create plots for each signal
+        # Create 64 subplots
         self.plots = []
-        for i in range(n_ch):
-            row = i % num_rows
-            col = i // num_rows
-            p = self.win.addPlot(row=row, col=col)
-            p.setYRange(-10000, 10000)
-            p.getAxis("left").setStyle(
-                showValues=False
-            )  # Remove axis title, keep axis lines
-            p.getAxis("bottom").setStyle(
-                showValues=False
-            )  # Remove axis title, keep axis lines
-            graph = p.plot(self.t, self.data[i], pen=pg.mkPen(color="r", width=2))
-            self.plots.append(graph)
+        self.curves = []
+        self.create_plots()
 
-        # Set up a QTimer to update the plot at the desired refresh rate
+        # Timer for Updating Plot
         self.timer = QTimer()
-        self.timer.setTimerType(Qt.TimerType.PreciseTimer)
-        self.timer.timeout.connect(self.update)
-        self.timer.start(1000 // refresh_rate)
-        self.t2 = time.time()
-        self.win.show()
+        self.timer.timeout.connect(self.refresh_plot)
+        self.timer.start(100)
 
-        self.timestamp = time.time()
-        self.t0 = time.time()
-        self.tot_samples = 0
+    def create_plots(self):
+        """Create 64 subplots in a grid layout"""
+        rows, cols = 4, 16  # Arrange plots in an 8x8 grid
+        for i in range(64):
+            plot_widget = pg.PlotWidget()
+            self.grid_layout.addWidget(plot_widget, i // cols, i % cols)  # Add to grid
+            plot_widget.getPlotItem().hideAxis("left")  # Hide Y-axis
+            plot_widget.getPlotItem().hideAxis("bottom")  # Hide X-axis
 
-        self.notch = signal.iirnotch(60, 30, signal_fs)
+            # Set fixed Y-axis limits
+            plot_widget.setYRange(-10000, 10000)
 
-    def update(self):
-        # Fetch available data
-        new_data = []
-        while True:
-            tmp_data = self.streamer.read()
-            if len(tmp_data) == 0:
-                # no more samples ready
-                break
-            new_data.append(tmp_data)
-        new_data = np.array(new_data).reshape(-1, self.n_ch)
-        nb_pts = len(new_data)
-        if nb_pts == 0:
-            return
+            curve = plot_widget.plot(pen="y")  # Yellow line
+            plot_widget.setTitle(f"Ch {i + 1}")  # Set title
+            self.plots.append(plot_widget)
+            self.curves.append(curve)
 
-        new_data = signal.filtfilt(self.notch[0], self.notch[1], new_data, 0)
-        new_data = new_data.T
-        self.tot_samples += nb_pts
-        t = time.time()
-        log.info(
-            f"(dt={t-self.timestamp:.3f}) Average fs={self.tot_samples/(t-self.t0):.3f}"
-        )
-        self.timestamp = t
+    def start_serial(self):
+        """Start the serial thread"""
+        if not self.serial_thread.isRunning():
+            self.serial_thread.start()
 
-        for i, plot_item in enumerate(self.plots):
-            self.data[i] = np.roll(self.data[i], -nb_pts)  # Shift the data
-            # self.data[i][-nb_pts:] = signal.decimate(new_data[i],2)  # Add new data point
-            self.data[i][-nb_pts:] = new_data[i]
-            plot_item.setData(self.t, self.data[i])
+    def stop_serial(self):
+        """Stop the serial thread"""
+        self.serial_thread.stop()
 
-    def run(self):
-        self.app.exec()
+    def update_plot(self, values):
+        """Receive new data (64 values) and update buffer with shape (64, n_samples)"""
+        if values.shape[0] == 64:  # Ensure correct data size
+            nb_pts = values.shape[1]
+            values = values[self.channel_map]
+            self.data_buffer = np.roll(self.data_buffer, -nb_pts, axis=1)  # Shift left
+            self.data_buffer[:, -nb_pts:] = values  # Insert new data
+
+    def refresh_plot(self):
+        """Refresh all 64 plots"""
+        for i in range(64):
+            self.curves[i].setData(self.data_buffer[i])
+
+    def closeEvent(self, event):
+        """Stop thread safely when closing window"""
+        self.stop_serial()
+        event.accept()
 
 
 if __name__ == "__main__":
     import emager_py.utils as eutils
+    import sys
 
     eutils.set_logging()
 
-    FS = 1000
-    BATCH = 50
+    app = QApplication(sys.argv)
 
-    print("Starting client and oscilloscope...")
-    stream_client = streamers.SerialStreamer("/dev/ttyACM0", 1500000)
-    # while True:
-    #     data = stream_client.read()
-    #     if len(data) == 0:
-    #         continue
-    #     print(data.size)
-    oscilloscope = RealTimeOscilloscope(stream_client, 64, FS, 3, 30)
-    oscilloscope.run()
+    window = SerialPlotter("/dev/cu.usbmodem1103", True)
+    window.show()
+    sys.exit(app.exec())

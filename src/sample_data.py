@@ -55,7 +55,7 @@ def sample_sgt():
         if gesture_id == len(gestures) - 1:
             new_data = r.dump_labelled_to_numpy(False)
             data = np.concatenate((data, new_data), axis=1)
-            noise_floor = np.sqrt(np.mean((data[4] - np.mean(data[4])) ** 2))
+            noise_floor = np.sqrt(np.mean((data[3] - np.mean(data[3])) ** 2))
             print(f"RMS Noise floor: {noise_floor:.2f}")
             # On MacOS, plotting crashes...
             # plt.figure()
