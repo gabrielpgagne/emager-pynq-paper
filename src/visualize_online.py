@@ -151,7 +151,8 @@ if __name__ == "__main__":
 
     data = []
     t0 = time.perf_counter()
-    while time.perf_counter() - t0 < TIME:
+    # while time.perf_counter() - t0 < TIME:
+    while len(data) < TIME * FS:
         new_data = stream_client.read()
         if len(new_data) == 0:
             continue
@@ -160,7 +161,7 @@ if __name__ == "__main__":
         data.extend(new_data)
         print(len(data))
     dt = time.perf_counter() - t0
-    c.close()
+    # c.close()
 
     true_fs = len(data) / dt
     print(f"Elapsed time: {dt:.3f} s")
