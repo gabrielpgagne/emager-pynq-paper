@@ -117,12 +117,19 @@ class SerialPlotter(QMainWindow):
 
         self.buffer_size = 5000
         self.data_buffer = np.zeros((64, self.buffer_size))
-        self.channel_map = (
-            [10, 22, 12, 24, 13, 26, 7, 28, 1, 30, 59, 32, 53, 34, 48, 36]
-            + [62, 16, 14, 21, 11, 27, 5, 33, 63, 39, 57, 45, 51, 44, 50, 40]
-            + [8, 18, 15, 19, 9, 25, 3, 31, 61, 37, 55, 43, 49, 46, 52, 38]
-            + [6, 20, 4, 17, 3, 23, 0, 29, 60, 35, 58, 41, 56, 47, 54, 42]
-        )
+
+        if remap:
+            self.channel_map = (
+                [6, 20, 4, 17, 2, 23, 0, 29, 60, 35, 58, 41, 56, 47, 54, 42]
+                + [8, 18, 15, 19, 9, 25, 3, 30, 61, 37, 55, 43, 49, 46, 52, 38]
+                + [63, 16, 14, 21, 11, 27, 5, 33, 62, 39, 57, 45, 51, 44, 50, 40]
+                + [10, 22, 12, 24, 13, 26, 7, 28, 1, 31, 59, 32, 53, 34, 48, 36]
+            )
+            assert set(self.channel_map) == set(np.arange(64)), (
+                "Channel mapping does not cover all channels"
+            )
+        else:
+            self.channel_map = list(np.arange(64))
 
         # Create 64 subplots
         self.plots = []
@@ -137,19 +144,20 @@ class SerialPlotter(QMainWindow):
     def create_plots(self):
         """Create 64 subplots in a grid layout"""
         rows, cols = 4, 16  # Arrange plots in an 8x8 grid
-        for i in range(64):
-            plot_widget = pg.PlotWidget()
-            self.grid_layout.addWidget(plot_widget, i // cols, i % cols)  # Add to grid
-            plot_widget.getPlotItem().hideAxis("left")  # Hide Y-axis
-            plot_widget.getPlotItem().hideAxis("bottom")  # Hide X-axis
+        for r in range(rows):
+            for c in range(cols):
+                plot_widget = pg.PlotWidget()
+                self.grid_layout.addWidget(plot_widget, r, c)  # Add to grid
+                plot_widget.getPlotItem().hideAxis("left")  # Hide Y-axis
+                plot_widget.getPlotItem().hideAxis("bottom")  # Hide X-axis
 
-            # Set fixed Y-axis limits
-            plot_widget.setYRange(-10000, 10000)
+                # Set fixed Y-axis limits
+                plot_widget.setYRange(-10000, 10000)
 
-            curve = plot_widget.plot(pen="y")  # Yellow line
-            plot_widget.setTitle(f"Ch {i + 1}")  # Set title
-            self.plots.append(plot_widget)
-            self.curves.append(curve)
+                curve = plot_widget.plot(pen="y")  # Yellow line
+                plot_widget.setTitle(f"Ch {16 * r + c}")  # Set title
+                self.plots.append(plot_widget)
+                self.curves.append(curve)
 
     def start_serial(self):
         """Start the serial thread"""
@@ -187,6 +195,7 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    window = SerialPlotter("/dev/cu.usbmodem1103", True)
+    window = SerialPlotter("/dev/cu.usbmodem1403", True)
+
     window.show()
     sys.exit(app.exec())
