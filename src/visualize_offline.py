@@ -18,7 +18,7 @@ if __name__ == "__main__":
 
     print("Loaded data with shape:", data.shape)
 
-    data = data[GESTURE, REPETITION]
+    # data = data[GESTURE, REPETITION]
     data = np.array(data).reshape(-1, 64)
     t = np.arange(data.shape[0]) / g.EMAGER_SAMPLING_RATE
     for i in range(16):
