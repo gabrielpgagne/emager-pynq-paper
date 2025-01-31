@@ -16,7 +16,7 @@ def heatmap(emg):
     plt.figure()
     emg = et.default_processing(emg)
 
-    baseline = np.min(emg[3])  # Rest
+    baseline = noise_floor(emg / 2)
     max = np.percentile(emg[0], 90)  # Power grip
 
     # print(f"Baseline: {baseline}, Max: {max}")
@@ -26,15 +26,11 @@ def heatmap(emg):
         emg_g = emg_g.reshape(-1, 4, 16)
         emg_g = np.mean(emg_g, axis=0)
 
-        # print(
-        #     f"({gesture}) mean {np.mean(emg_g)}, std {np.std(emg_g)}, max {np.max(emg_g)}, min {np.min(emg_g)}"
-        # )
         plt.subplot(6, 1, gesture + 1)
         plt.imshow(emg_g, vmin=baseline, vmax=max)
         plt.ylabel(f"{gesture}")
         plt.xticks([])
         plt.yticks([])
-    # plt.colorbar()
 
 
 if __name__ == "__main__":
@@ -44,12 +40,8 @@ if __name__ == "__main__":
     GESTURE = 0
     REPETITION = 0
 
-    # data = ed.load_emager_data(g.EMAGER_DATASET_ROOT, 0, SESSION)
-    # noise = noise_floor(data)
-    # print(f"RMS Noise floor: {noise:.2f}")
-    # heatmap(data)
-    # plt.title("Subject 0")
     data = ed.load_emager_data(g.EMAGER_DATASET_ROOT, SUBJECT, SESSION)
+
     noise = noise_floor(data)
     print(f"RMS Noise floor: {noise:.2f}")
     heatmap(data)

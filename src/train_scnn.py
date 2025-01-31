@@ -287,9 +287,9 @@ if __name__ == "__main__":
 
     # ============ Single model parameters ==========
 
-    SUBJECT = 13
+    SUBJECT = 14
     SESSION = 1
-    VALID_REPS = [0]
+    VALID_REPS = [1]
     QUANT = -1
 
     # ========= Train a single model ==========

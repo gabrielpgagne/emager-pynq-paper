@@ -36,9 +36,9 @@ def get_and_save_best_model(subject: int, quant: int, shots: int, transform_name
         "repetition": best_rep,
         "transform": transform_name,
     }
-    
+
     os.makedirs(globals.OUT_DIR_ROOT + globals.OUT_DIR_FINN, exist_ok=True)
-    
+
     with open(
         globals.OUT_DIR_ROOT + globals.OUT_DIR_FINN + "finn_config.json", "w"
     ) as f:
@@ -63,7 +63,7 @@ def launch_finn_build():
         "bash",
         "-c",
         # Can't separate the arguments since we call bash -c
-        f"./run-docker.sh build_custom {proj_dir} src/build_dataflow",
+        f"./run-docker.sh build_custom {proj_dir} src/_build_dataflow_scnn",
     ]
     try:
         ret = sp.run(cmd, universal_newlines=True)
@@ -197,7 +197,7 @@ if __name__ == "__main__":
 
         for p in procs:
             p.join()
-            
+
     # test_finn_accelerator(get_docker_redis_ip(), True)
     # test_finn_accelerator("pynq", False)
 

@@ -18,6 +18,8 @@ from PyQt6.QtCore import QTimer, Qt, QThread, pyqtSignal
 
 import serial
 
+from emager_py.utils import EMAGER_CHANNEL_MAP
+
 
 def decode_buffer(data: np.ndarray):
     """
@@ -60,15 +62,21 @@ class SerialReader(QThread):
         """Continuously read data from the serial port"""
         try:
             with serial.Serial(self.port, self.baudrate, timeout=0.1) as ser:
+                t0 = time.perf_counter()
+                n_samples = 0
                 data = []
                 while self.running:
-                    # packets_to_read = ser.in_waiting // 128
-                    # if packets_to_read == 0:
-                    #     continue
                     data_bytes = np.frombuffer(ser.read(128), dtype=np.uint8)
-                    data.extend(decode_buffer(data_bytes))
+                    new_data = decode_buffer(data_bytes)
+                    data.extend(new_data)
+                    if n_samples == 0:
+                        t0 = time.perf_counter()
+                    n_samples += len(new_data)
+
                     if len(data) >= 50:
-                        print(f"Sending {len(data)} samples")
+                        print(
+                            f"Sample rate: {n_samples / (time.perf_counter() - t0):.2f} Hz"
+                        )
                         self.data_received.emit(np.array(data).T)  # Send data to GUI
                         data = []
         except serial.SerialException as e:
@@ -119,15 +127,10 @@ class SerialPlotter(QMainWindow):
         self.data_buffer = np.zeros((64, self.buffer_size))
 
         if remap:
-            self.channel_map = (
-                [6, 20, 4, 17, 2, 23, 0, 29, 60, 35, 58, 41, 56, 47, 54, 42]
-                + [8, 18, 15, 19, 9, 25, 3, 30, 61, 37, 55, 43, 49, 46, 52, 38]
-                + [63, 16, 14, 21, 11, 27, 5, 33, 62, 39, 57, 45, 51, 44, 50, 40]
-                + [10, 22, 12, 24, 13, 26, 7, 28, 1, 31, 59, 32, 53, 34, 48, 36]
-            )
-            assert set(self.channel_map) == set(np.arange(64)), (
-                "Channel mapping does not cover all channels"
-            )
+            self.channel_map = EMAGER_CHANNEL_MAP
+            assert set(self.channel_map) == set(
+                np.arange(64)
+            ), "Channel mapping does not cover all channels"
         else:
             self.channel_map = list(np.arange(64))
 

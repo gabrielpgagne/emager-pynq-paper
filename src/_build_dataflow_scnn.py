@@ -51,7 +51,7 @@ if __name__ == "__main__":
 
     # Add topk on model ?
     input_bits = 16 if globals.TRANSFORM == "default" else 8
-    model_transformations.save_scnn_model_as_qonnx(
+    model_transformations.save_model_as_qonnx(
         torch_model,
         onnx_model,
         globals.EMAGER_DATA_SHAPE,

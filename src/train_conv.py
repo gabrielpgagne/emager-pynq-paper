@@ -1,14 +1,14 @@
 """
-This module is used to train all subjects with the SCNN model and do preliminary testing.
+This module is used to train all subjects with the CNN model and do preliminary testing.
 """
 
+from matplotlib import pyplot as plt
 import pandas as pd
 from datetime import datetime
 
 import numpy as np
 
 import torch.cuda
-from torch import nn
 from torch.utils.data import DataLoader
 
 import lightning as L
@@ -16,6 +16,7 @@ from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 
 from sklearn.metrics import accuracy_score
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 import emager_py.dataset as ed
 import emager_py.torch.models as etm
@@ -36,35 +37,42 @@ def test_cnn(
 ):
     n_votes = 150 // etrans.get_transform_decimation(transform)
 
+    model.fe.eval()
     if calib_dataloader is not None:
-        model.set_finetune()
+        model.classifier.train()
         trainer.fit(model, calib_dataloader)
+    model.eval()
 
-    preds = None
-    labels = None
-
-    # Test non-MV accuracy
+    # Test post-calibration if needed
+    test_labels = []
+    test_preds = []
     for x, y_true in test_dataloader:
-        logits = model(x).cpu().detach().numpy()
+        with torch.no_grad():
+            logits = model(x).cpu().detach().numpy()
         y = np.argmax(logits, axis=1)
         y_true = y_true.cpu().detach().numpy()
-        if preds is None:
-            preds = y
-            labels = y_true
-        else:
-            preds = np.hstack((preds, y))
-            labels = np.hstack((labels, y))
+
+        test_labels.extend(y_true)
+        test_preds.extend(y)
+
+    test_labels = np.array(test_labels)
+    test_preds = np.array(test_preds)
 
     # Test majority vote accuracy
-    label_majority_voted = emv.majority_vote(labels, n_votes)
-    pred_majority_voted = emv.majority_vote(preds, n_votes)
+    label_majority_voted = emv.majority_vote(test_labels, n_votes)
+    pred_majority_voted = emv.majority_vote(test_preds, n_votes)
 
-    raw_acc = accuracy_score(labels, preds)
+    raw_acc = accuracy_score(test_labels, test_preds)
     majority_acc = accuracy_score(label_majority_voted, pred_majority_voted)
+
+    cm = confusion_matrix(test_labels, test_preds, normalize="true")
+    cm2 = confusion_matrix(label_majority_voted, pred_majority_voted, normalize="true")
 
     return {
         "acc_raw": [raw_acc],
         "acc_maj": [majority_acc],
+        "conf_mat_raw": [cm],
+        "conf_mat_maj": [cm2],
     }
 
 
@@ -76,51 +84,56 @@ def test_cnn_pop_layer(
 ):
     n_votes = 150 // etrans.get_transform_decimation(transform)
 
-    model.set_finetune(True)
     fe = model.fe
+    fe.eval()
     classi = LinearDiscriminantAnalysis()
 
-    logits_list = []
-    labels_list = []
+    calib_logits = []
+    calib_labels = []
     for batch in calib_dataloader:
         # Assuming batch is a tuple (features, labels)
         features, labels = batch
-        logits = fe(features).detach()
-        # Convert to NumPy and store
-        logits_list.append(logits.numpy())  # Convert tensor to NumPy
-        labels_list.append(labels.numpy())
+        with torch.no_grad():
+            logits = fe(features).detach()
+        calib_logits.extend(logits.numpy())
+        calib_labels.extend(labels.numpy())
 
     # Concatenate all batches into single NumPy arrays
-    features_np = np.concatenate(logits_list, axis=0)
-    labels_np = np.concatenate(labels_list, axis=0)
+    calib_logits = np.array(calib_logits)
+    calib_labels = np.array(calib_labels)
 
-    classi.fit(features_np, labels_np)
+    classi.fit(calib_logits, calib_labels)
 
-    preds = None
-    labels = None
-
-    # Test non-MV accuracy
+    # Test post-calibration if needed
+    test_labels = []
+    test_preds = []
     for x, y_true in test_dataloader:
-        logits = fe(x).cpu().detach().numpy()
+        with torch.no_grad():
+            logits = fe(x).cpu().detach().numpy()
         y = classi.predict(logits)
         y_true = y_true.cpu().detach().numpy()
-        if preds is None:
-            preds = y
-            labels = y_true
-        else:
-            preds = np.hstack((preds, y))
-            labels = np.hstack((labels, y))
+
+        test_labels.extend(y_true)
+        test_preds.extend(y)
+
+    test_labels = np.array(test_labels)
+    test_preds = np.array(test_preds)
 
     # Test majority vote accuracy
-    label_majority_voted = emv.majority_vote(labels, n_votes)
-    pred_majority_voted = emv.majority_vote(preds, n_votes)
+    label_majority_voted = emv.majority_vote(test_labels, n_votes)
+    pred_majority_voted = emv.majority_vote(test_preds, n_votes)
 
-    raw_acc = accuracy_score(labels, preds)
+    raw_acc = accuracy_score(test_labels, test_preds)
     majority_acc = accuracy_score(label_majority_voted, pred_majority_voted)
+
+    cm = confusion_matrix(test_labels, test_preds, normalize="true")
+    cm2 = confusion_matrix(label_majority_voted, pred_majority_voted, normalize="true")
 
     return {
         "acc_raw": [raw_acc],
         "acc_maj": [majority_acc],
+        "conf_mat_raw": [cm],
+        "conf_mat_maj": [cm2],
     }
 
 
@@ -131,7 +144,7 @@ def train_cnn(data_root, subject, train_session, val_reps, transform, quant):
     # Boilerplate
     trainer = L.Trainer(
         accelerator="auto" if torch.cuda.is_available() or quant == -1 else "cpu",
-        callbacks=[EarlyStopping(monitor="train_loss")],
+        callbacks=[EarlyStopping(monitor="val_loss")],
         enable_checkpointing=False,
         logger=False,
         max_epochs=10,
@@ -150,20 +163,27 @@ def train_cnn(data_root, subject, train_session, val_reps, transform, quant):
 
     # Train and test
     model = etm.EmagerCNN((4, 16), 6, quant)
-    trainer.fit(model, train)
+    trainer.fit(model, train, test_intra)
 
-    intra_test_results = test_cnn_pop_layer(model, test_intra, train, transform)
-    inter_test_results = test_cnn_pop_layer(model, test_inter, calib_inter, transform)
+    # intra_test_results = test_cnn_pop_layer(model, test_intra, train, transform)
+    # inter_test_results = test_cnn_pop_layer(model, test_inter, calib_inter, transform)
 
-    # intra_test_results = test_cnn(model, trainer, test_intra, None, transform)
-    # inter_test_results = test_cnn(model, trainer, test_inter, calib_inter, transform)
+    intra_test_results = test_cnn(model, trainer, test_intra, None, transform)
+    inter_test_results = test_cnn(model, trainer, test_inter, calib_inter, transform)
+
     test_results = pd.DataFrame(
         {
-            "shots": [-1],  # patch
+            "shots": [-1],
+            #
             "acc_raw_intra": intra_test_results["acc_raw"],
             "acc_maj_intra": intra_test_results["acc_maj"],
+            "conf_mat_raw_intra": intra_test_results["conf_mat_raw"],
+            "conf_mat_maj_intra": intra_test_results["conf_mat_maj"],
+            #
             "acc_raw_inter": inter_test_results["acc_raw"],
             "acc_maj_inter": inter_test_results["acc_maj"],
+            "conf_mat_raw_inter": inter_test_results["conf_mat_raw"],
+            "conf_mat_maj_inter": inter_test_results["conf_mat_maj"],
         }
     )
     return model, test_results
@@ -258,13 +278,14 @@ def test_all_cnn(cross_validations: list[str], quantizations: list[int], transfo
 
 if __name__ == "__main__":
     L.seed_everything(310)
+    torch.set_float32_matmul_precision("high")
 
     cross_validations = list(zip(ed.get_repetitions()[::2], ed.get_repetitions()[1::2]))
     # quantizations = [1, 2, 3, 4, 6, 8, 32]
 
-    SUBJECT = 13
-    SESSION = 2
-    VALID_REPS = [1, 8]
+    SUBJECT = 14
+    SESSION = 1
+    VALID_REPS = [1]
     QUANT = 4
 
     # # for ses in [1, 2]:
@@ -288,8 +309,7 @@ if __name__ == "__main__":
         QUANT,
     )
     print(results)
-
-    # utils.save_model(model, results, SUBJECT, SESSION, VALID_REPS, QUANT)
+    utils.save_model(model, results, SUBJECT, SESSION, VALID_REPS, QUANT)
 
     # trainer = L.Trainer(
     #     accelerator="auto",
