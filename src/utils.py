@@ -392,6 +392,7 @@ def is_finn_locked():
     else:
         return False
 
+
 def resume_from_latest(cross_validations: list, quantizations: list[int]):
     """
     Returns subject, session, cross-validation, and quantization to resume training from the latest model.
@@ -407,7 +408,7 @@ def resume_from_latest(cross_validations: list, quantizations: list[int]):
         sub0 = len(subjs) - 1
     except FileNotFoundError:
         return sub0, ses0, cv0, q0
-    
+
     # Get all the models for the latest subject
     models = os.listdir(OUT_DIR_ROOT + OUT_DIR_MODELS + subjs[-1])
     if len(models) == 0:
@@ -456,6 +457,7 @@ def resume_from_latest(cross_validations: list, quantizations: list[int]):
         # rollover
         resume[i + 1] += 1
     return tuple(reversed(resume))
+
 
 if __name__ == "__main__":
     import emager_py.torch.models as etm

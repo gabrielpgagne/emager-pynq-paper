@@ -40,7 +40,9 @@ if __name__ == "__main__":
     GESTURE = 0
     REPETITION = 0
 
-    data = ed.load_emager_data(g.EMAGER_DATASET_ROOT, SUBJECT, SESSION)
+    data_dir = "data/live_test/"
+
+    data = ed.load_emager_data(data_dir, SUBJECT, SESSION)
 
     noise = noise_floor(data)
     print(f"RMS Noise floor: {noise:.2f}")

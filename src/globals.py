@@ -14,9 +14,9 @@ EMAGER_SAMPLING_RATE = 1000
 EMAGER_SAMPLE_BATCH = 25
 TRANSFORM = "root"
 
-assert TRANSFORM in emager_py.transforms.transforms_lut, (
-    f"Invalid transform: {TRANSFORM}. Must be in {emager_py.transforms.transforms_lut.keys()}"
-)
+assert (
+    TRANSFORM in emager_py.transforms.transforms_lut
+), f"Invalid transform: {TRANSFORM}. Must be in {emager_py.transforms.transforms_lut.keys()}"
 
 
 EMAGER_DATASET_ROOT = "./data/EMAGER/"
@@ -25,7 +25,9 @@ if sys.platform == "darwin":
 
 VALIDATION_EMAGER_ROOT = "./data/EMAGER/"
 
-PYNQ_HOSTNAME = "192.168.2.4"
+# PYNQ_HOSTNAME = "pynq.local"
+PYNQ_HOSTNAME = "192.168.0.99"
+
 FINN_ROOT = "/home/gabrielgagne/Documents/git/finn/"
 FINN_TARGET_BOARD = "zybo-z7-20"
 FINN_MODEL_PARAMS_DICT = {

@@ -40,8 +40,8 @@ def test_cnn(
     n_votes = 150 // etrans.get_transform_decimation(transform)
 
     if calib_dataloader is not None:
-        model.eval()
-        model.fc5.train()
+        model.fe.eval()
+        model.classifier.train()
         trainer.fit(model, calib_dataloader)
     model.eval()
 
@@ -160,7 +160,10 @@ def train_cnn(data_root, subject, train_session, val_reps, transform, quant):
         2 if int(train_session) == 1 else 1,
         val_reps,
         absda="none",
+        shuffle="test",
         transform=transform,
+        train_batch=256,
+        test_batch=64,
     )
 
     # Train and test
@@ -288,7 +291,7 @@ if __name__ == "__main__":
     SUBJECT = 14
     SESSION = 1
     VALID_REPS = [1]
-    QUANT = 4
+    QUANT = 8
 
     # # for ses in [1, 2]:
     # for ses in [SESSION]:
@@ -310,7 +313,12 @@ if __name__ == "__main__":
         etrans.root_processing,
         QUANT,
     )
-    print(results)
+    print(
+        results["acc_raw_intra"].values[0],
+        results["acc_maj_intra"].values[0],
+        results["acc_raw_inter"].values[0],
+        results["acc_maj_inter"].values[0],
+    )
     utils.save_model(model, results, SUBJECT, SESSION, VALID_REPS, QUANT)
 
     # trainer = L.Trainer(

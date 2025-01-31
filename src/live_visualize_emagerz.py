@@ -72,7 +72,7 @@ class RedisReader(QThread):
         self.wait()
 
 
-class SerialPlotter(QMainWindow):
+class DataPlotter(QMainWindow):
     def __init__(
         self,
         hostname: str,
@@ -179,7 +179,7 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    window = SerialPlotter(g.PYNQ_HOSTNAME, True)
+    window = DataPlotter(g.PYNQ_HOSTNAME, True)
 
     window.show()
     sys.exit(app.exec())

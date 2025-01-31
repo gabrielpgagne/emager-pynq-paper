@@ -12,16 +12,15 @@ import globals as g
 
 def sample_sgt():
     SUBJECT = 14
-    SESSION = 2
-    N_REPS = 5
+    SESSION = 1
+    N_REPS = 1
     REP_TIME = 5
 
-    hostname = g.PYNQ_HOSTNAME
+    finetune_data_dir = "data/live_test/"
 
+    hostname = g.PYNQ_HOSTNAME
     images_path = "output/gestures/"
     gestures = [2, 14, 26, 1, 8, 30]
-
-    finetune_data_dir = "data/EMAGER/"
 
     r = er.EmagerRedis(hostname)
     r.set_pynq_params(g.TRANSFORM)

@@ -2,6 +2,7 @@ if __name__ == "__main__":
     import os
     import sys
     import subprocess as sp
+    import copy
 
     sp.check_call([sys.executable, "-m", "pip", "install", "./emager-py[finn]"])
 
@@ -41,10 +42,7 @@ if __name__ == "__main__":
         MODEL_PARAMS["repetition"],
         MODEL_PARAMS["quantization"],
     )
-    # torch_model = torch_model.fe
-
-    #  WTF this fucking shit only works when using an untrained model
-    torch_model = etm.EmagerCNN((4, 16), 6, MODEL_PARAMS["quantization"])
+    torch_model = copy.deepcopy(torch_model.fe)
 
     input_bits = 16 if globals.TRANSFORM == "default" else 8
     model_transformations.save_model_as_qonnx(
