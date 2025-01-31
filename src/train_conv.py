@@ -9,6 +9,8 @@ from datetime import datetime
 import numpy as np
 
 import torch.cuda
+from torch import nn
+
 from torch.utils.data import DataLoader
 
 import lightning as L
@@ -37,9 +39,9 @@ def test_cnn(
 ):
     n_votes = 150 // etrans.get_transform_decimation(transform)
 
-    model.fe.eval()
     if calib_dataloader is not None:
-        model.classifier.train()
+        model.eval()
+        model.fc5.train()
         trainer.fit(model, calib_dataloader)
     model.eval()
 
@@ -84,7 +86,7 @@ def test_cnn_pop_layer(
 ):
     n_votes = 150 // etrans.get_transform_decimation(transform)
 
-    fe = model.fe
+    fe = nn.Sequential(*([mod for mod in model.modules()][:-1]))
     fe.eval()
     classi = LinearDiscriminantAnalysis()
 
