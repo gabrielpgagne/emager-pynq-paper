@@ -3,20 +3,17 @@ import matplotlib.pyplot as plt
 from scipy import fft
 
 import emager_py.dataset as ed
-import emager_py.transforms as et
+import emager_py.data_processing as dp
+
+import utils
 import globals as g
-
-
-def noise_floor(emg):
-    noise_floor = np.sqrt(np.mean((emg[3] - np.mean(emg[3])) ** 2))
-    return noise_floor
 
 
 def heatmap(emg):
     plt.figure()
-    emg = et.default_processing(emg)
+    emg = dp.preprocess_data(emg)
 
-    baseline = noise_floor(emg / 2)
+    baseline = utils.noise_floor(emg) / 2
     max = np.percentile(emg[0], 90)  # Power grip
 
     # print(f"Baseline: {baseline}, Max: {max}")
@@ -44,14 +41,13 @@ if __name__ == "__main__":
 
     data = ed.load_emager_data(data_dir, SUBJECT, SESSION)
 
-    noise = noise_floor(data)
+    noise = utils.noise_floor(data)
     print(f"RMS Noise floor: {noise:.2f}")
     heatmap(data)
     plt.title(f"Subject {SUBJECT}")
-    plt.show()
+    # plt.show()
 
     # exit()
-
     data = data[GESTURE : GESTURE + 1, REPETITION : REPETITION + 1]
 
     print("Loaded data with shape:", data.shape)

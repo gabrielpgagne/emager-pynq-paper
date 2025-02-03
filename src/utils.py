@@ -1,13 +1,43 @@
 import os
 from typing import Iterable
+from matplotlib.pylab import f
 import torch
 import json
 import enum
 import pandas as pd
+import numpy as np
+from scipy import signal
 
 import emager_py.dataset as ed
 
 from globals import OUT_DIR_ROOT, OUT_DIR_MODELS, OUT_DIR_STATS, OUT_DIR_FINN
+
+
+def filter_notch(data: np.ndarray) -> np.ndarray:
+    """Filter GRN{HW, C}-shaped data.
+
+    Args:
+        data (np.ndarray): EMG data to filter (N, 64) or (G, R, N, 64)
+
+    Returns:
+        _type_: _description_
+    """
+    b, a = signal.iirnotch(60, 30, 1000)
+    if len(data.shape) == 2:
+        # (N, 64)
+        filtered = signal.lfilter(b, a, data, axis=0)
+    elif len(data.shape) == 4:
+        # (G, R, N, 64)
+        filtered = signal.lfilter(b, a, data, axis=3)
+    return filtered
+
+
+def noise_floor(emg) -> float:
+    """
+    Calculate noise floor of CRN-shaped EMG data.
+    """
+    noise_floor = np.sqrt(np.mean((emg[3] - np.mean(emg[3])) ** 2))
+    return noise_floor
 
 
 class ModelMetric(enum.Enum):

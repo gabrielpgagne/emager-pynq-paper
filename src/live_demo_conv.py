@@ -1,31 +1,26 @@
-import emager_py
-import emager_py.utils
 import lightning as L
 import torch.cuda
-from torch.utils.data import DataLoader, TensorDataset
-import numpy as np
 import threading
 import pandas as pd
 import json
 import os
 
 from emager_py.finn import remote_operations as ro
-import emager_py.screen_guided_training as sgt
 import emager_py.emager_redis as er
 import emager_py.data_processing as dp
 import emager_py.dataset as ed
 import emager_py.transforms as etrans
 import emager_py.torch.models as etm
-from emager_py import utils as eutils
+import emager_py.torch.datasets as etd
 
 import globals as g
 from finn_build_scnn import launch_finn_build
 import utils
+import sample_data as sd
 
 import queue
 from tkinter import Tk, Label, Button
 from PIL import Image, ImageTk
-import sv_ttk
 
 
 def gui_readloop(hostname, images_path):
@@ -45,17 +40,11 @@ def gui_readloop(hostname, images_path):
         )
         t.start()
 
-        preds_buffer = []
         while t.is_alive():
             pred_bytes = r.pop_fifo(r.PREDICTIONS_FIFO_KEY, timeout=1)
-            pred = r.decode_label_bytes(pred_bytes)
+            pred = r.decode_label_bytes(pred_bytes).item(0)
             print(f"Received predictions: {pred}")
-
-            preds_buffer.append(pred.item(0))
-            if len(preds_buffer) >= 10:  # 25 ms per prediction -> 250 ms
-                pred_mv = np.argmax(np.bincount(preds_buffer))  # majority vote
-                preds_buffer = []
-                id_queue.put(pred_mv)
+            id_queue.put(pred)
 
     images_ids = [
         "Hand_Close",
@@ -84,7 +73,6 @@ def gui_readloop(hostname, images_path):
     # Create the Tkinter GUI
     root = Tk()
     root.title("EMaGerZ Prediction Viewer")
-    sv_ttk.set_theme("dark")
 
     # Label to display the image
     label = Label(root)
@@ -119,56 +107,28 @@ def live_training(
     shots: int,
     sample_data: bool,
     transform: str,
-    n_reps=1,
+    n_reps=5,
     rep_time=5,
-    gestures=[2, 14, 26, 1, 8, 30],
-    img_dir: str = "output/gestures/",
+    gestures=g.GESTURES,
+    img_dir: str = g.GESTURES_PATH,
 ):
-    data = None
+    cross_val_rep = [1]
     if sample_data:
-        r.clear_data()
-        c = ro.connect_to_pynq(hostname=hostname)
-
-        def resume_training_cb(gesture_id):
-            ro.sample_training_data(
-                r,
-                c,
-                rep_time * g.EMAGER_SAMPLING_RATE,
-                g.TARGET_EMAGER_PYNQ_PATH,
-                gesture_id,
-            )
-
-        sgt.EmagerGuidedTraining(
+        sd.sample_sgt(
+            r,
+            hostname,
+            data_dir,
+            subject,
+            session,
             n_reps,
+            rep_time,
             gestures,
             img_dir,
-            rep_time,
-            resume_training_callback=resume_training_cb,
-            callback_arg="gesture",
-        ).start()
+        )
 
-        # raw data -> processed DataLoader
-        data = r.dump_labelled_to_numpy(False)[..., eutils.EMAGER_CHANNEL_MAP]
-        ed.process_save_dataset(data, data_dir, lambda d: d, subject, session)
-
-    data = ed.load_emager_data(
-        data_dir,
-        subject,
-        session,
+    train_dl, val_dl = etd.get_lnocv_dataloaders(
+        data_dir, subject, session, cross_val_rep, transform=transform
     )
-    print(f"Loaded data with shape {data.shape}")
-
-    # Save unprocessed data
-    data = transform(data)
-
-    data, labels = dp.extract_labels_and_roll(data, 2)
-    data = data.astype(np.float32)
-    train_triplets = dp.generate_triplets(data, labels, 5000)
-    train_triplets = [
-        torch.from_numpy(t).reshape((-1, 1, *g.EMAGER_DATA_SHAPE))
-        for t in train_triplets
-    ]
-    train_dl = DataLoader(TensorDataset(*train_triplets), batch_size=64, shuffle=True)
 
     # Train
     trainer = L.Trainer(
@@ -178,9 +138,9 @@ def live_training(
         max_epochs=10,
     )
     model = etm.EmagerCNN(g.EMAGER_DATA_SHAPE, 6, quant)
-    trainer.fit(model, train_dl)
+    trainer.fit(model, train_dl, val_dl)
 
-    utils.save_model(model, pd.DataFrame(), subject, session, [0], quant)
+    utils.save_model(model, pd.DataFrame(), subject, session, cross_val_rep, quant)
     os.makedirs(g.OUT_DIR_ROOT + g.OUT_DIR_FINN, exist_ok=True)
 
     params_dict = {
@@ -188,7 +148,7 @@ def live_training(
         "quantization": quant,
         "shots": shots,
         "session": session,
-        "repetition": [0],
+        "repetition": cross_val_rep,
         "transform": g.TRANSFORM,
     }
 
@@ -209,59 +169,48 @@ def live_testing(
     sample_data: bool,
     n_reps=1,
     rep_time=5,
-    gestures=[2, 14, 26, 1, 8, 30],
-    img_path: str = "output/gestures/",
+    gestures=g.GESTURES,
+    img_path: str = g.GESTURES_PATH,
 ):
-    r.clear_data()
     if sample_data:
-        c = ro.connect_to_pynq(hostname=hostname)
-
-        def resume_training_cb(gesture_id):
-            ro.sample_training_data(
-                r,
-                c,
-                rep_time * g.EMAGER_SAMPLING_RATE,
-                g.TARGET_EMAGER_PYNQ_PATH,
-                gesture_id,
-            )
-
-        sgt.EmagerGuidedTraining(
-            n_reps,
-            gestures,
-            img_path,
-            rep_time,
-            resume_training_callback=resume_training_cb,
-            callback_arg="gesture",
-        ).start()
-        data = r.dump_labelled_to_numpy(True)[..., eutils.EMAGER_CHANNEL_MAP]
-        ed.process_save_dataset(data, data_dir, lambda d: d, subject, session)
-    else:
-        calib_data = ed.load_emager_data(
+        sd.sample_sgt(
+            r,
+            hostname,
             data_dir,
             subject,
             session,
+            n_reps,
+            rep_time,
+            gestures,
+            img_path,
         )
-        # unmap data since emagerz remaps it
-        calib_data = calib_data[..., eutils.EMAGER_CHANNEL_MAP]
-        calib_data, calib_labels = dp.extract_labels(calib_data)
-        # Push data and labels to redis in batches
-        for i in range(0, len(calib_data), g.EMAGER_SAMPLE_BATCH):
-            r.push_sample(
-                calib_data[i : (i + g.EMAGER_SAMPLE_BATCH)],
-                calib_labels[i],
-            )
+
+    calib_data = ed.load_emager_data(
+        data_dir,
+        subject,
+        session,
+    )
+    calib_data[..., 14] = 0  # bad channel
+    calib_data, calib_labels = dp.extract_labels(calib_data)
+
+    # Push data and labels to redis in batches
+    for i in range(0, len(calib_data), g.EMAGER_SAMPLE_BATCH):
+        r.push_sample(
+            calib_data[i : (i + g.EMAGER_SAMPLE_BATCH)],
+            calib_labels[i],
+        )
     gui_readloop(hostname, img_path)
 
 
 if __name__ == "__main__":
     SUBJECT = 14
-    SESSION = 1
+    SESSION = 2
 
     TRAIN = False
     SAMPLE_TRAIN_DATA = False
 
     TEST = True
-    SAMPLE_TEST_DATA = False
+    SAMPLE_TEST_DATA = True
 
     # ==== Training parameters ====
     N_TRAIN_REPS = 5
@@ -272,19 +221,20 @@ if __name__ == "__main__":
 
     # ==== Testing parameters ====
     N_TEST_REPS = 1
-    LEN_TEST_REPS = 5
+    LEN_TEST_REPS = 3
     TEST_DATA_DIR = "data/live_test/"
 
     # ==== Varia parameters ====
     HOSTNAME = g.PYNQ_HOSTNAME
-    GESTURES_ID = [2, 14, 26, 1, 8, 30]
-    IMAGES_DIR = "output/gestures/"
+    GESTURES_ID = g.GESTURES
+    IMAGES_DIR = g.GESTURES_PATH
 
     TRANSFORM = etrans.transforms_lut[g.TRANSFORM]
 
     # ==== Script ====
     r = er.EmagerRedis(HOSTNAME)
     r.set_pynq_params(g.TRANSFORM)
+    r.set_sampling_params(1000, 25, 5000)
     r.set_rhd_sampler_params(
         low_bw=15,
         hi_bw=350,
@@ -293,8 +243,8 @@ if __name__ == "__main__":
         bitstream=ro.DEFAULT_EMAGER_PYNQ_PATH + "bitfile/finn-accel.bit",
     )
 
-    r.clear_data()
     # ========== TRAINING ==========
+    r.clear_data()
     if TRAIN:
         live_training(
             r,
@@ -312,6 +262,7 @@ if __name__ == "__main__":
             IMAGES_DIR,
         )
     # =========== TESTING ==============
+    r.clear_data()
     if TEST:
         live_testing(
             r,

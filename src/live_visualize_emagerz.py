@@ -5,7 +5,6 @@ import time
 from scipy import signal
 
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui
 
 from PyQt6.QtWidgets import (
     QApplication,
@@ -13,9 +12,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QGridLayout,
-    QPushButton,
 )
-from PyQt6.QtCore import QTimer, Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QTimer, QThread, pyqtSignal
 
 from emager_py.emager_redis import EmagerRedis
 from emager_py.finn import remote_operations as ro
@@ -39,7 +37,7 @@ class RedisReader(QThread):
         self.red.set_rhd_sampler_params(
             low_bw=15,
             hi_bw=350,
-            # en_dsp=1,
+            en_dsp=0,
             fp_dsp=20,
             bitstream=ro.DEFAULT_EMAGER_PYNQ_PATH + "bitfile/finn-accel.bit",
         )
@@ -62,7 +60,9 @@ class RedisReader(QThread):
             n_samples += len(new_data)
             if len(data) >= 50:
                 print(f"Sample rate: {n_samples / (time.perf_counter() - t0):.2f} Hz")
-                self.data_received.emit(np.array(data).T)  # Send data to GUI
+                self.data_received.emit(
+                    np.array(data)
+                )  # Send data to GUI (N_samples, 64)
                 data = []
 
     def stop(self):
@@ -76,16 +76,11 @@ class DataPlotter(QMainWindow):
     def __init__(
         self,
         hostname: str,
-        remap: bool,
+        remap: bool = False,
+        filter: bool = True,
     ):
         """
-        Create the Oscilloscope.
-
-        - streamer: implements read() method, returning a (n_samples, n_ch) array. Must return (0, n_ch) when no samples are available.
-        - n_ch: number of "oscilloscope channels"
-        - signal_fs: Signal sample rate [Hz]
-        - accumulate_t: x-axis length [s]
-        - refresh_rate: oscilloscope refresh rate [Hz]
+        Live oscilloscope-like display of all 64 EMG channels in a 4x16 grid.
         """
         super().__init__()
 
@@ -107,12 +102,21 @@ class DataPlotter(QMainWindow):
         self.central_widget.setLayout(layout)
 
         self.buffer_size = 5000
-        self.data_buffer = np.zeros((64, self.buffer_size))
+        self.data_buffer = np.zeros((self.buffer_size, 64))
 
         if remap:
             self.channel_map = EMAGER_CHANNEL_MAP
         else:
             self.channel_map = list(np.arange(64))
+
+        if filter:
+            self.notch = signal.iirnotch(60, 30, 1000)
+
+            # N, Wn = signal.buttord([20, 350], [15, 500], 3, 40, fs=1000)
+            # self.bandpass = signal.butter(N, Wn, "band", fs=1000, output="sos")
+        else:
+            self.notch = None
+            # self.bandpass = None
 
         # Create 64 subplots
         self.plots = []
@@ -135,9 +139,9 @@ class DataPlotter(QMainWindow):
                 plot_widget.getPlotItem().hideAxis("bottom")  # Hide X-axis
 
                 # Set fixed Y-axis limits
-                plot_widget.setYRange(-10000, 10000)
+                plot_widget.setYRange(-5000, 5000)
 
-                curve = plot_widget.plot(pen="y")  # Yellow line
+                curve = plot_widget.plot(pen="r")  # Yellow line
                 plot_widget.setTitle(f"Ch {16 * r + c}")  # Set title
                 self.plots.append(plot_widget)
                 self.curves.append(curve)
@@ -152,17 +156,18 @@ class DataPlotter(QMainWindow):
         self.worker_th.stop()
 
     def update_plot(self, values):
-        """Receive new data (64 values) and update buffer with shape (64, n_samples)"""
-        if values.shape[0] == 64:  # Ensure correct data size
-            nb_pts = values.shape[1]
-            values = values[self.channel_map]
-            self.data_buffer = np.roll(self.data_buffer, -nb_pts, axis=1)  # Shift left
-            self.data_buffer[:, -nb_pts:] = values  # Insert new data
+        """Receive new data (64 values) and update buffer with shape (n_samples, 64)"""
+        nb_pts = len(values)
+        values = values[:, self.channel_map]
+        if self.notch is not None:
+            values = signal.lfilter(*self.notch, values, axis=0)
+        self.data_buffer = np.roll(self.data_buffer, -nb_pts, 0)
+        self.data_buffer[-nb_pts:] = values
 
     def refresh_plot(self):
         """Refresh all 64 plots"""
         for i in range(64):
-            self.curves[i].setData(self.data_buffer[i])
+            self.curves[i].setData(self.data_buffer[:, i])
 
     def closeEvent(self, event):
         """Stop thread safely when closing window"""
@@ -179,7 +184,7 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    window = DataPlotter(g.PYNQ_HOSTNAME, True)
+    window = DataPlotter(g.PYNQ_HOSTNAME, remap=False)
 
     window.show()
     sys.exit(app.exec())

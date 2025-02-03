@@ -5,18 +5,25 @@ import sys
 
 # emager_py.utils.set_logging()
 
-SUBJECT = 0
-QUANT = 8
-SHOTS = -1
-
 EMAGER_DATA_SHAPE = (4, 16)
 EMAGER_SAMPLING_RATE = 1000
 EMAGER_SAMPLE_BATCH = 25
 TRANSFORM = "root"
 
-assert (
-    TRANSFORM in emager_py.transforms.transforms_lut
-), f"Invalid transform: {TRANSFORM}. Must be in {emager_py.transforms.transforms_lut.keys()}"
+# GESTURE_NAMES = [
+#     "Hand_Close",
+#     "Thumbs_Up",
+#     "Chuck_Grip",
+#     "No_Motion",
+#     "Index_Pinch",
+#     "Index_Extension",
+# ]
+GESTURES = [2, 14, 8, 1, 26, 30]
+GESTURES_PATH = "output/gestures/"
+
+assert TRANSFORM in emager_py.transforms.transforms_lut, (
+    f"Invalid transform: {TRANSFORM}. Must be in {emager_py.transforms.transforms_lut.keys()}"
+)
 
 
 EMAGER_DATASET_ROOT = "./data/EMAGER/"
@@ -26,7 +33,10 @@ if sys.platform == "darwin":
 VALIDATION_EMAGER_ROOT = "./data/EMAGER/"
 
 # PYNQ_HOSTNAME = "pynq.local"
-PYNQ_HOSTNAME = "192.168.0.99"
+if sys.platform == "darwin":
+    PYNQ_HOSTNAME = "192.168.2.4"
+else:
+    PYNQ_HOSTNAME = "192.168.0.99"
 
 FINN_ROOT = "/home/gabrielgagne/Documents/git/finn/"
 FINN_TARGET_BOARD = "zybo-z7-20"
