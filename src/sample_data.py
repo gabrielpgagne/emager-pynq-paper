@@ -58,9 +58,10 @@ def sample_sgt(
     data[..., 14] = 0  # bad channel
 
     data_path = data_dir + ed.format_subject(subject) + ed.format_session(session)
-    for f in os.listdir(data_path):
-        print(f"Removing {f}")
-        os.remove(os.path.join(data_path, f))
+    if os.path.exists(data_path):
+        for f in os.listdir(data_path):
+            print(f"Removing {f}")
+            os.remove(os.path.join(data_path, f))
 
     ed.process_save_dataset(data, data_dir, lambda d: d, subject, session)
     return data
