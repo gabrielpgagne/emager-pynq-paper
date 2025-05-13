@@ -1,7 +1,15 @@
-# EMaGer-PYNQ
+# EMaGerZ paper
+
+This repository is used for offline training and evaluation. It also serves as the central hub towards other repositories for the EMaGerZ platform.
+
+## Setup
 
 First, setup the globals in `globals.py`.
 
-Then, run `model_training.py`. For every subject, session, LOOCV and quantization, a model will be trained and tested with a given `emager_py.transform`. This process takes _many_ hours to run.
+## Linked repositories
 
-After, you can experiment with `stats.py` to visualize the models' performance.
+- The central library for the embedded and workstation codebases: [emager-py](https://github.com/SBIOML/emager-py)
+- RTL module for [RHD2164](https://github.com/SBIOML/rhd2164-spi-fpga)
+- HAL for RHD2000 chips: [librhd](https://github.com/SBIOML/rhd2000-driver)
+- Sampling executable for PYNQ: [rhd-sampler](https://github.com/SBIOML/rhd-sampler)
+- The embedded platform gesture recognition implementation: [emager-pynq](https://github.com/SBIOML/emager-pynq)
