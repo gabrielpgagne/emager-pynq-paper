@@ -35,9 +35,9 @@ def test_cnn(
     trainer: L.Trainer,
     test_dataloader: DataLoader,
     calib_dataloader: None | DataLoader,
-    transform: str,
+    decim: int,
 ):
-    n_votes = 150 // etrans.get_transform_decimation(transform)
+    n_votes = 150 // decim
 
     if calib_dataloader is not None:
         model.fe.eval()
@@ -82,12 +82,12 @@ def test_cnn_pop_layer(
     model: etm.EmagerCNN,
     test_dataloader: DataLoader,
     calib_dataloader: None | DataLoader,
-    transform: str,
+    decim: str,
 ):
-    n_votes = 150 // etrans.get_transform_decimation(transform)
+    n_votes = 150 // decim
 
-    fe = nn.Sequential(*([mod for mod in model.modules()][:-1]))
-    fe.eval()
+    model.classifier = nn.Identity()
+    model.fe.eval()
     classi = LinearDiscriminantAnalysis()
 
     calib_logits = []
@@ -96,7 +96,7 @@ def test_cnn_pop_layer(
         # Assuming batch is a tuple (features, labels)
         features, labels = batch
         with torch.no_grad():
-            logits = fe(features).detach()
+            logits = model(features).detach()
         calib_logits.extend(logits.numpy())
         calib_labels.extend(labels.numpy())
 
@@ -111,7 +111,7 @@ def test_cnn_pop_layer(
     test_preds = []
     for x, y_true in test_dataloader:
         with torch.no_grad():
-            logits = fe(x).cpu().detach().numpy()
+            logits = model(x).cpu().detach().numpy()
         y = classi.predict(logits)
         y_true = y_true.cpu().detach().numpy()
 
@@ -139,42 +139,77 @@ def test_cnn_pop_layer(
     }
 
 
-def train_cnn(data_root, subject, train_session, val_reps, transform, quant):
+def train_cnn(
+    data_root,
+    subject,
+    train_session,
+    val_reps,
+    test_reps,
+    transform,
+    quant,
+    save=False,
+    ws=1,
+):
+    if not quant:
+        return
+
     if isinstance(transform, str):
-        transform = etrans.transforms_lut[g.TRANSFORM]
+        transform = etrans.transforms_lut[transform]
 
     # Boilerplate
     trainer = L.Trainer(
         accelerator="auto" if torch.cuda.is_available() or quant == -1 else "cpu",
-        callbacks=[EarlyStopping(monitor="val_loss")],
+        callbacks=[EarlyStopping(monitor="val_loss", min_delta=0.01, mode="min")],
         enable_checkpointing=False,
         logger=False,
         max_epochs=10,
     )
-    train, test_intra = etd.get_lnocv_dataloaders(
-        data_root, subject, train_session, val_reps, transform=transform
+
+    train, val_intra = etd.get_lnocv_dataloaders(
+        data_root, subject, train_session, val_reps, transform=transform, ws=ws
     )
-    test_inter, calib_inter = etd.get_lnocv_dataloaders(
+
+    test_intra = etd.get_lnocv_dataloaders(
+        data_root, subject, train_session, test_reps, transform=transform, ws=ws
+    )[1]
+
+    inter_session = 2 if int(train_session) == 1 else 1
+
+    _, calib_inter = etd.get_lnocv_dataloaders(
         data_root,
         subject,
-        2 if int(train_session) == 1 else 1,
+        inter_session,
         val_reps,
         absda="none",
         shuffle="test",
         transform=transform,
-        train_batch=256,
         test_batch=64,
+        ws=ws,
+    )
+
+    _, test_inter = etd.get_lnocv_dataloaders(
+        data_root,
+        subject,
+        inter_session,
+        test_reps,
+        absda="none",
+        shuffle="none",
+        transform=transform,
+        test_batch=256,
+        ws=ws,
     )
 
     # Train and test
-    model = etm.EmagerCNN((4, 16), 6, quant)
-    trainer.fit(model, train, test_intra)
+    model = etm.EmagerCNN((4, 16), 6, quant, ws)
+    trainer.fit(model, train, val_intra)
 
     # intra_test_results = test_cnn_pop_layer(model, test_intra, train, transform)
     # inter_test_results = test_cnn_pop_layer(model, test_inter, calib_inter, transform)
 
-    intra_test_results = test_cnn(model, trainer, test_intra, None, transform)
-    inter_test_results = test_cnn(model, trainer, test_inter, calib_inter, transform)
+    decim = etrans.get_transform_decimation(transform) * ws
+
+    intra_test_results = test_cnn(model, trainer, test_intra, None, decim)
+    inter_test_results = test_cnn(model, trainer, test_inter, calib_inter, decim)
 
     test_results = pd.DataFrame(
         {
@@ -191,10 +226,25 @@ def train_cnn(data_root, subject, train_session, val_reps, transform, quant):
             "conf_mat_maj_inter": inter_test_results["conf_mat_maj"],
         }
     )
+
+    if save:
+        utils.save_model(
+            model, test_results, subject, train_session, val_reps + test_reps, quant
+        )
+
     return model, test_results
 
 
-def train_all_cnn(cross_validations: list[str], quantizations: list[int], transform):
+def train_all_cnn(
+    cross_validations: list[str], quantizations: list[int], transform, ws
+):
+    import multiprocessing as mp
+    from multiprocessing import Process
+    import time
+
+    num_procs = 4
+    mp.set_start_method("spawn")
+
     if not isinstance(quantizations, list):
         quantizations = [quantizations]
 
@@ -202,7 +252,6 @@ def train_all_cnn(cross_validations: list[str], quantizations: list[int], transf
 
     first_run = True
     sub0, ses0, cv0, q0 = utils.resume_from_latest(cross_validations, quantizations)
-
     for subj in ed.get_subjects(g.EMAGER_DATASET_ROOT)[sub0:]:
         ses_start = ses0 if first_run else 0
         for ses in sessions[ses_start:]:
@@ -210,17 +259,42 @@ def train_all_cnn(cross_validations: list[str], quantizations: list[int], transf
             for valid_reps in cross_validations[cv_start:]:
                 q_start = q0 if first_run else 0
                 first_run = False
-                for quant in quantizations[q_start:]:
+
+                procs = []
+                while len(quantizations[q_start:]) % num_procs != 0:
+                    quantizations.append(None)
+
+                for quants in zip(
+                    quantizations[q_start::2], quantizations[q_start + 1 :: 2]
+                ):
                     print("*" * 100)
                     print(f"Current datetime: {datetime.now()}")
                     print(
-                        f"Training subject {subj} on session {ses} with L{len(valid_reps)}OCV reps={valid_reps} with {quant}-bit quantization."
+                        f"Training subject {subj} on session {ses} with L{len(valid_reps)}OCV reps={valid_reps} with {quants}-bit quantization."
                     )
                     print("*" * 100)
-                    model, test_results = train_cnn(
-                        g.EMAGER_DATASET_ROOT, subj, ses, valid_reps, transform, quant
-                    )
-                    utils.save_model(model, test_results, subj, ses, valid_reps, quant)
+
+                    for q in quants:
+                        p = Process(
+                            target=train_cnn,
+                            args=(
+                                g.EMAGER_DATASET_ROOT,
+                                subj,
+                                int(ses),
+                                valid_reps[0],
+                                valid_reps[1],
+                                transform,
+                                q,
+                                True,
+                                ws,
+                            ),
+                        )
+                        p.start()
+                        procs.append(p)
+                        time.sleep(10)
+
+                    for p in procs:
+                        p.join()
 
 
 def test_all_cnn(cross_validations: list[str], quantizations: list[int], transform):
@@ -285,41 +359,50 @@ if __name__ == "__main__":
     L.seed_everything(310)
     torch.set_float32_matmul_precision("high")
 
-    cross_validations = list(zip(ed.get_repetitions()[::2], ed.get_repetitions()[1::2]))
+    # ============ Train all models ==========
+
+    # cross_validations = list(zip(ed.get_repetitions()[::2], ed.get_repetitions()[1::2]))
+    # cross_validations = [("002", "008")]
     # quantizations = [1, 2, 3, 4, 6, 8, 32]
 
-    SUBJECT = 14
-    SESSION = 1
-    VALID_REPS = [1]
-    QUANT = 8
+    # train_all_cnn(cross_validations, quantizations, etrans.root_processing)
 
-    # # for ses in [1, 2]:
-    # for ses in [SESSION]:
-    #     # for reps in cross_validations:
-    #     for reps in [VALID_REPS]:
-    #         # for q in [1, 2, 3, 4, 6, 8]:
-    #         for q in [QUANT]:
-    #             model, results = train_cnn(
-    #                 g.EMAGER_DATASET_ROOT, SUBJECT, ses, reps, etrans.root_processing, q
-    #             )
-    #             print(results)
-    #             utils.save_model(model, results, SUBJECT, ses, reps, q)
+    # ============== Test all models =============
+
+    # ========= Train a single model ==========
+
+    SUBJECT = 8
+    SESSION = 1
+
+    TEST_REPS = [2]
+    VAL_REPS = [9]
+
+    QUANT = 8
 
     model, results = train_cnn(
         g.EMAGER_DATASET_ROOT,
         SUBJECT,
         SESSION,
-        VALID_REPS,
-        etrans.root_processing,
+        VAL_REPS,
+        TEST_REPS,
+        # etrans.root_processing,
+        etrans.filter_rect_u8_processing,
+        # etrans.filter_rect_processing,
+        # etrans.default_processing,
         QUANT,
+        ws=25,
+        # ws=1,
     )
+
     print(
         results["acc_raw_intra"].values[0],
         results["acc_maj_intra"].values[0],
         results["acc_raw_inter"].values[0],
         results["acc_maj_inter"].values[0],
     )
-    utils.save_model(model, results, SUBJECT, SESSION, VALID_REPS, QUANT)
+    utils.save_model(model, results, SUBJECT, SESSION, VAL_REPS + TEST_REPS, QUANT)
+
+    # ========= Test a single model ==========
 
     # trainer = L.Trainer(
     #     accelerator="auto",

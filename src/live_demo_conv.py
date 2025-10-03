@@ -14,7 +14,7 @@ import emager_py.torch.models as etm
 import emager_py.torch.datasets as etd
 
 import globals as g
-from finn_build_scnn import launch_finn_build
+from finn_build_conv import launch_finn_build
 import utils
 import sample_data as sd
 
@@ -204,13 +204,13 @@ def live_testing(
 
 if __name__ == "__main__":
     SUBJECT = 14
-    SESSION = 2
+    SESSION = 1
 
-    TRAIN = False
+    TRAIN = True
     SAMPLE_TRAIN_DATA = False
 
-    TEST = True
-    SAMPLE_TEST_DATA = True
+    TEST = False
+    SAMPLE_TEST_DATA = False
 
     # ==== Training parameters ====
     N_TRAIN_REPS = 5
@@ -232,19 +232,22 @@ if __name__ == "__main__":
     TRANSFORM = etrans.transforms_lut[g.TRANSFORM]
 
     # ==== Script ====
-    r = er.EmagerRedis(HOSTNAME)
-    r.set_pynq_params(g.TRANSFORM)
-    r.set_sampling_params(1000, 25, 5000)
-    r.set_rhd_sampler_params(
-        low_bw=15,
-        hi_bw=350,
-        # en_dsp=1,
-        fp_dsp=20,
-        bitstream=ro.DEFAULT_EMAGER_PYNQ_PATH + "bitfile/finn-accel.bit",
-    )
+    try:
+        r = er.EmagerRedis(HOSTNAME)
+        r.set_pynq_params(g.TRANSFORM)
+        r.set_sampling_params(1000, 25, 5000)
+        r.set_rhd_sampler_params(
+            low_bw=15,
+            hi_bw=350,
+            # en_dsp=1,
+            fp_dsp=20,
+            bitstream=ro.DEFAULT_EMAGER_PYNQ_PATH + "bitfile/finn-accel.bit",
+        )
+        r.clear_data()
+    except:
+        r = None
 
     # ========== TRAINING ==========
-    r.clear_data()
     if TRAIN:
         live_training(
             r,

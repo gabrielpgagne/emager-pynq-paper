@@ -1,14 +1,21 @@
 import emager_py.transforms
 import emager_py.utils
 import sys
+import os
 
+# os.environ["FINN_XILINX_PATH"] = "/home/gabrielgagne/Xilinx"
+# os.environ["FINN_XILINX_VERSION"] = "2022.1"
 
 # emager_py.utils.set_logging()
 
 EMAGER_DATA_SHAPE = (4, 16)
 EMAGER_SAMPLING_RATE = 1000
 EMAGER_SAMPLE_BATCH = 25
+
+
 TRANSFORM = "root"
+# TRANSFORM = "filter_rect_u8"
+
 
 # GESTURE_NAMES = [
 #     "Hand_Close",

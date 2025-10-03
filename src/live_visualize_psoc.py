@@ -1,10 +1,7 @@
 import time
 import numpy as np
-import logging as log
-from scipy import signal
 
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtGui
 
 from PyQt6.QtWidgets import (
     QApplication,
@@ -12,13 +9,13 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QGridLayout,
-    QPushButton,
 )
-from PyQt6.QtCore import QTimer, Qt, QThread, pyqtSignal
+from PyQt6.QtCore import QTimer, QThread, pyqtSignal
 
 import serial
 
 from emager_py.utils import EMAGER_CHANNEL_MAP
+from emager_py.data_processing import filter_data
 
 
 def decode_buffer(data: np.ndarray):
@@ -77,7 +74,7 @@ class SerialReader(QThread):
                         print(
                             f"Sample rate: {n_samples / (time.perf_counter() - t0):.2f} Hz"
                         )
-                        self.data_received.emit(np.array(data).T)  # Send data to GUI
+                        self.data_received.emit(np.array(data))  # Send data to GUI
                         data = []
         except serial.SerialException as e:
             print(f"Serial Error: {e}")
@@ -93,7 +90,8 @@ class SerialPlotter(QMainWindow):
     def __init__(
         self,
         port: str,
-        remap: bool,
+        remap: bool = True,
+        filter: bool = True,
     ):
         """
         Create the Oscilloscope.
@@ -124,15 +122,14 @@ class SerialPlotter(QMainWindow):
         self.central_widget.setLayout(layout)
 
         self.buffer_size = 5000
-        self.data_buffer = np.zeros((64, self.buffer_size))
+        self.data_buffer = np.zeros((self.buffer_size, 64))
 
         if remap:
             self.channel_map = EMAGER_CHANNEL_MAP
-            assert set(self.channel_map) == set(
-                np.arange(64)
-            ), "Channel mapping does not cover all channels"
         else:
             self.channel_map = list(np.arange(64))
+
+        self.filter = filter
 
         # Create 64 subplots
         self.plots = []
@@ -155,7 +152,7 @@ class SerialPlotter(QMainWindow):
                 plot_widget.getPlotItem().hideAxis("bottom")  # Hide X-axis
 
                 # Set fixed Y-axis limits
-                plot_widget.setYRange(-10000, 10000)
+                plot_widget.setYRange(-5000, 5000)
 
                 curve = plot_widget.plot(pen="y")  # Yellow line
                 plot_widget.setTitle(f"Ch {16 * r + c}")  # Set title
@@ -176,8 +173,10 @@ class SerialPlotter(QMainWindow):
         if values.shape[0] == 64:  # Ensure correct data size
             nb_pts = values.shape[1]
             values = values[self.channel_map]
-            self.data_buffer = np.roll(self.data_buffer, -nb_pts, axis=1)  # Shift left
-            self.data_buffer[:, -nb_pts:] = values  # Insert new data
+            if self.filter:
+                values = filter_data(values)
+            self.data_buffer = np.roll(self.data_buffer, -nb_pts, 0)  # Shift left
+            self.data_buffer[-nb_pts:] = values  # Insert new data
 
     def refresh_plot(self):
         """Refresh all 64 plots"""
@@ -198,7 +197,7 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    window = SerialPlotter("/dev/cu.usbmodem1403", True)
+    window = SerialPlotter("/dev/cu.usbmodem1403", True, True)
 
     window.show()
     sys.exit(app.exec())

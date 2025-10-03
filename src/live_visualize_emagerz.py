@@ -2,8 +2,6 @@ import numpy as np
 import threading
 import time
 
-from scipy import signal
-
 import pyqtgraph as pg
 
 from PyQt6.QtWidgets import (
@@ -18,6 +16,7 @@ from PyQt6.QtCore import QTimer, QThread, pyqtSignal
 from emager_py.emager_redis import EmagerRedis
 from emager_py.finn import remote_operations as ro
 from emager_py.utils import EMAGER_CHANNEL_MAP
+from emager_py.data_processing import filter_data
 
 
 # Worker Thread to Read Serial Data
@@ -109,14 +108,7 @@ class DataPlotter(QMainWindow):
         else:
             self.channel_map = list(np.arange(64))
 
-        if filter:
-            self.notch = signal.iirnotch(60, 30, 1000)
-
-            # N, Wn = signal.buttord([20, 350], [15, 500], 3, 40, fs=1000)
-            # self.bandpass = signal.butter(N, Wn, "band", fs=1000, output="sos")
-        else:
-            self.notch = None
-            # self.bandpass = None
+        self.filter = filter
 
         # Create 64 subplots
         self.plots = []
@@ -159,8 +151,8 @@ class DataPlotter(QMainWindow):
         """Receive new data (64 values) and update buffer with shape (n_samples, 64)"""
         nb_pts = len(values)
         values = values[:, self.channel_map]
-        if self.notch is not None:
-            values = signal.lfilter(*self.notch, values, axis=0)
+        if self.filter:
+            values = filter_data(values)
         self.data_buffer = np.roll(self.data_buffer, -nb_pts, 0)
         self.data_buffer[-nb_pts:] = values
 

@@ -36,7 +36,9 @@ if __name__ == "__main__":
     onnx_model = build_dir + "model.onnx"
 
     torch_model = utils.load_model(
-        etm.EmagerCNN((4, 16), 6, MODEL_PARAMS["quantization"]),
+        etm.EmagerCNN(
+            (4, 16), 6, MODEL_PARAMS["quantization"], globals.EMAGER_SAMPLE_BATCH
+        ),
         MODEL_PARAMS["subject"],
         MODEL_PARAMS["session"],
         MODEL_PARAMS["repetition"],
@@ -51,6 +53,7 @@ if __name__ == "__main__":
         globals.EMAGER_DATA_SHAPE,
         "INT16" if input_bits == 16 else "UINT8",
         show=False,
+        ws=globals.EMAGER_SAMPLE_BATCH,
     )
 
     if isinstance(globals.TRANSFORM, str):
@@ -86,6 +89,7 @@ if __name__ == "__main__":
         # start_step=dataflow_steps[-3],  # Only copy BD
         output_dir=build_dir,
         mvau_wwidth_max=36,
+        minimize_bit_width=False,
         target_fps=1000,
         synth_clk_period_ns=10.0,
         # fpga_part="xc7z020clg400-1",

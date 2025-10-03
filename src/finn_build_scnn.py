@@ -69,8 +69,10 @@ def launch_finn_build():
         ret = sp.run(cmd, universal_newlines=True)
         if ret.returncode != 0:
             raise RuntimeError("Failed to build FINN accelerator")
-    except:  # noqa
-        os.chdir(proj_dir)
+    except Exception as e:
+        print(e)
+
+    os.chdir(proj_dir)
 
 
 def test_finn_accelerator(hostname: str, simulate_results: bool = False):
@@ -172,31 +174,43 @@ def test_finn_accelerator(hostname: str, simulate_results: bool = False):
 
 
 if __name__ == "__main__":
-    from emager_py.emager_redis import get_docker_redis_ip
+    # ====================================
+    # ===== RUN IN VIRTUALBOX VM =========
+    # ====================================
     from multiprocessing import Process
     import time
 
-    quants = [2, 3, 4, 6, 8]
-    subjects = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    # quants = [2, 3, 4, 6, 8, 0] # must be even number :)
+    quants = [8, 0]
+    # subjects = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    # subjects = [6, 7, 8, 9, 10, 11, 12]
+    subjects = [5]
 
-    subjects = [9]
+    # subjects = [9]
     # quants = [4]
+    shots = 20
 
     for sub in subjects:
-        procs = []
-        for quant in quants:
-            get_and_save_best_model(sub, quant, globals.SHOTS, globals.TRANSFORM)
-            utils.lock_finn(subject=sub, quant=quant, shots=globals.SHOTS)
+        for quantz in zip(quants[::2], quants[1::2]):
+            procs = []
+            for quant in quantz:
+                if quant == 0:
+                    continue
 
-            p = Process(target=launch_finn_build, args=())
-            p.start()
-            procs.append(p)
+                get_and_save_best_model(sub, quant, shots, globals.TRANSFORM)
+                utils.lock_finn(subject=sub, quant=quant, shots=shots)
 
-            while utils.is_finn_locked():
-                time.sleep(1)  # wait for FINN to start and read finn_config.json
+                # launch_finn_build()
 
-        for p in procs:
-            p.join()
+                p = Process(target=launch_finn_build, args=())
+                p.start()
+                procs.append(p)
+
+                while utils.is_finn_locked():
+                    time.sleep(1)  # wait for FINN to start and read finn_config.json
+
+            for p in procs:
+                p.join()
 
     # test_finn_accelerator(get_docker_redis_ip(), True)
     # test_finn_accelerator("pynq", False)

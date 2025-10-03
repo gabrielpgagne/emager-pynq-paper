@@ -1,45 +1,53 @@
-import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+import numpy as np
 import pandas as pd
 
-import globals as g
-results = dict()
-with open("data/sampling_throughput.txt") as f:
-    lines = f.readlines()
-    for line in lines:
-        toks = line.split()
-        results[toks[0]] = [int(tok) for tok in toks[1:]]
 
-max_sps = results["sps"][0]
-max_batch = results["Batchsize"][-1]
+if __name__ == "__main__":
+    results = pd.read_csv("data/sampling_benchmark.csv")
+    results = results.groupby("batch").mean()
 
-results = pd.DataFrame(results)
+    print(results)
 
-font = {'size'   : 24}
-matplotlib.rc('font', **font)
+    max_batch = results.index.max()
+    max_sps = results["sps"].max()
 
-# sns.set_theme(font_scale=2)
-plt.figure(figsize=(16, 9))
-sns.lineplot(results[1:], x="Batchsize", y="sps", linewidth=2)
-plt.axhline(
-    1000,
-    0,
-    max_batch,
-    color="r",
-    linestyle="dashed",
-)
-plt.axhline(
-    max_sps,
-    0,
-    max_batch,
-    color="b",
-    linestyle="dashed",
-)
+    # font = {"size": 24}
+    # matplotlib.rc("font", **font)
 
-plt.ylim(0, 10000)
-plt.grid(True, "both", "both")
-plt.ylabel("Samples per second")
-plt.xlabel("Batch size")
-plt.savefig(g.OUT_DIR_ROOT + "img/sampling_throughput.png",bbox_inches="tight")
+    plt.figure(figsize=(16, 9))
+    sns.set_theme(font_scale=2)
+    sns.set_style("whitegrid")
+
+    ax = sns.lineplot(results[1:], x="batch", y="sps", marker="o", linewidth=2)
+    ax.spines[["right", "top"]].set_visible(False)
+
+    l1 = ax.axhline(
+        1000,
+        0,
+        max_batch,
+        color="r",
+        linestyle="dashed",
+    )
+    l2 = ax.axhline(
+        max_sps,
+        0,
+        max_batch,
+        color="b",
+        linestyle="dashed",
+    )
+
+    ax.legend(
+        [l1, l2],
+        ["Minimum required (1000 sps)", f"Maximum measured ({max_sps:.0f} sps)"],
+    )
+    ax.set_yticks(range(0, 11000, 1000))
+    # ax.set_xticks(range(0, max_batch + 1, 25))
+
+    ax.grid(True, "both", "both")
+    ax.set_ylabel("Samples per second")
+    ax.set_xlabel("Batch size")
+    # plt.savefig("output/img/sampling_throughput.png", bbox_inches="tight")
+    plt.show()

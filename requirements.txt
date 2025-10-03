@@ -1,6 +1,10 @@
--e "./emager-py[torch]"
+-e ./emager-py[torch]
 pandas
 seaborn
 pyqt5
 fabric
 bleak
+matplotlib
+torch
+torchvision
+torchaudio

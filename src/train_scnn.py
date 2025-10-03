@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 import lightning as L
 
 import matplotlib.pyplot as plt
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, euclidean_distances
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 import emager_py.dataset as ed
@@ -23,8 +23,6 @@ import emager_py.torch.datasets as etd
 import emager_py.torch.utils as etu
 import emager_py.majority_vote as emv
 
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from siamese_classifier import CosineSimilarity
 
 import utils
@@ -73,9 +71,10 @@ def test_scnn(
             if shot != -1:
                 to_sample = np.zeros((0,), dtype=np.uint8)
                 for k in np.unique(calib_labels):
-                    num_k = np.sum([calib_labels == k])
+                    class_labels = np.nonzero(calib_labels == k)[0]
+                    num_k = len(class_labels)
                     to_sample_k = np.random.choice(
-                        np.where(calib_labels == k)[0],
+                        class_labels,
                         min(shot, num_k),
                         replace=False,
                     )
@@ -88,13 +87,15 @@ def test_scnn(
 
             # Create classifier and calibrate it
             classi = CosineSimilarity()
+
             # classi = LinearDiscriminantAnalysis()
             # classi = KNeighborsClassifier()
 
             classi.fit(calib_embeds_trial, calib_labels_trial)
 
             # Get all predictions
-            test_preds = classi.predict(test_embeddings)
+            dists = euclidean_distances(test_embeddings, classi.features)
+            test_preds = np.argmin(dists, axis=1)
             test_preds_mv = emv.majority_vote(test_preds, n_votes)
 
             # Now get accuracy results
@@ -278,34 +279,37 @@ if __name__ == "__main__":
 
     # ============ Train all models ==========
 
-    # cross_validations = list(zip(ed.get_repetitions()[::2], ed.get_repetitions()[1::2]))
-    # quantizations = [1, 2, 3, 4, 6, 8, 32]
+    cross_validations = list(zip(ed.get_repetitions()[::2], ed.get_repetitions()[1::2]))
+    quantizations = [2, 3, 4, 6, 8, 32]
 
     # train_all_scnn(cross_validations, quantizations, etrans.root_processing)
 
-    # test_all_scnn(cross_validations, quantizations, etrans.root_processing)
+    test_all_scnn(cross_validations, quantizations, etrans.root_processing)
 
     # ============ Single model parameters ==========
 
-    SUBJECT = 14
+    SUBJECT = 9
     SESSION = 1
-    VALID_REPS = [1]
-    QUANT = -1
+    VALID_REPS = [2, 8]
+    # QUANT = 4
+    QUANTS = [8]
 
     # ========= Train a single model ==========
+    # for q in QUANTS:
+    #     model, results = train_scnn(
+    #         g.EMAGER_DATASET_ROOT,
+    #         SUBJECT,
+    #         1,
+    #         VALID_REPS,
+    #         etrans.root_processing,
+    #         q,
+    #         [5, 20],
+    #     )
+    #     # utils.save_model(model, results, SUBJECT, SESSION, VALID_REPS, q)
+    #     print(results)
 
-    model, results = train_scnn(
-        g.EMAGER_DATASET_ROOT,
-        SUBJECT,
-        1,
-        VALID_REPS,
-        etrans.root_processing,
-        QUANT,
-        [-1],
-    )
-    utils.save_model(model, results, SUBJECT, SESSION, VALID_REPS, QUANT)
-    print(results)
-    plt.show()
+    # plt.show()
+
     # ========= Test a single model ==========
 
     # _, calib_intra, test_intra, calib_inter, test_inter = etd.get_triplet_dataloaders(
